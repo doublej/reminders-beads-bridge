@@ -1,0 +1,125 @@
+graph TB
+    %% External actors
+    subgraph external["External Actors"]
+        IOS["iOS Claude /<br/>iPhone Reminders.app"]
+        USER["User<br/>(Mac Reminders.app)"]
+        BD[("bd CLI<br/>+ .beads/*.db<br/><i>source of truth</i>")]
+        KANBAN["beads-kanban<br/>HTTP API<br/>:5173"]
+        GHOSTTY["Ghostty<br/>+ claude / codex"]
+        ICLOUD[("iCloud sync")]
+    end
+
+    %% Apple frameworks
+    subgraph apple["Apple frameworks"]
+        EK["EventKit<br/>EKEventStore"]
+        NC["NSNotificationCenter<br/>EKEventStoreChanged"]
+        REMINDERS[("Reminders.app<br/>~/Library/Reminders/")]
+    end
+
+    %% Daemon process
+    subgraph daemon["beads-bridge daemon (launchd)"]
+        WATCHER["watcher.py<br/>install observer<br/>wait(max_s)<br/>0.6s settle + 0.4s debounce"]
+        SYNC["daemon.sync_once<br/>per-cycle entry"]
+        subgraph beads_path["Beads sync path"]
+            MASTER["master.sync<br/>Beads: Projects<br/>checked = hidden"]
+            SETTINGS["settings.sync<br/>Beads: Settings<br/>show_completed toggle"]
+            META["meta.sync<br/>Beads: Readme"]
+            ACTIVITY["activity.sync<br/>Beads: Activity<br/>~200 events"]
+            RECONCILE["reconcile_project<br/>per visible project"]
+            BODY["body.compose / parse<br/>bb:meta · bb:desc · bb:notes<br/>bb:restored banner"]
+            MARKERS["body.consume_agent_markers<br/>!agent only"]
+            BEADS_API["api.py + events.py<br/>(plumbing)"]
+        end
+        subgraph trigger_path["Standalone session triggers<br/>(no beads coupling)"]
+            TRIGGERS["triggers.process_all<br/>scans Claude/Codex Sessions<br/>parse_request → cwd + prompt"]
+        end
+        LAUNCH["launch.py<br/>Ghostty -e claude|codex<br/>--working-directory"]
+        STATE[("state.json<br/>bead-id ↔ reminder-id")]
+        ACTIVITY_LOG[("activity.jsonl")]
+    end
+
+    %% Reserved control lists
+    subgraph beads_lists["Beads-prefixed lists"]
+        L_PROJ["Beads: Projects"]
+        L_SET["Beads: Settings"]
+        L_DOC["Beads: Readme"]
+        L_LOG["Beads: Activity"]
+        L_PRJ["Beads: &lt;project&gt;<br/>(one per active project)"]
+    end
+    subgraph trigger_lists["Trigger lists (independent)"]
+        L_CLAUDE["Claude: Sessions"]
+        L_CODEX["Codex: Sessions"]
+    end
+
+    %% Data flow: bead → reminder
+    BD -- "bd list --json --all" --> RECONCILE
+    RECONCILE -- "compose body" --> BODY
+    BODY --> L_PRJ
+    RECONCILE -- "EventKit batch<br/>create / update / delete" --> EK
+    EK --> REMINDERS
+    REMINDERS --> L_PRJ
+    REMINDERS --> L_PROJ
+    REMINDERS --> L_SET
+    REMINDERS --> L_DOC
+    REMINDERS --> L_LOG
+    REMINDERS --> L_CLAUDE
+    REMINDERS --> L_CODEX
+
+    %% Wake-on-change
+    REMINDERS -. writes .-> NC
+    ICLOUD -. sync .-> REMINDERS
+    NC -- "EKEventStoreChanged<br/>(within process)" --> WATCHER
+    WATCHER --> SYNC
+    SYNC --> MASTER
+    SYNC --> SETTINGS
+    SYNC --> META
+    SYNC --> ACTIVITY
+    SYNC --> RECONCILE
+    MASTER -. "hidden set" .-> SYNC
+    SETTINGS -. "show_completed" .-> RECONCILE
+
+    %% Reminder → bead signals
+    L_PRJ -- "completed reminder" --> RECONCILE
+    RECONCILE -- "bd close / bd reopen" --> BD
+    L_PRJ -- "new (no bd-id: prefix)" --> RECONCILE
+    RECONCILE -- "bd create<br/>(capture)" --> BD
+
+    %% Hide/show
+    L_PROJ -- "checked = hide" --> MASTER
+    MASTER -- "delete_list(Beads: project)" --> EK
+
+    %% Markers (beads side: agent only)
+    L_PRJ -- "&lt;bb:notes&gt; !agent" --> MARKERS
+    MARKERS -- "POST /api/agents" --> BEADS_API
+    BEADS_API --> KANBAN
+    MARKERS -- "rewrite into &lt;bb:agent ...&gt;" --> BODY
+
+    %% Standalone trigger flow
+    SYNC --> TRIGGERS
+    L_CLAUDE -- "unchecked = pending" --> TRIGGERS
+    L_CODEX -- "unchecked = pending" --> TRIGGERS
+    TRIGGERS --> LAUNCH
+    LAUNCH --> GHOSTTY
+    TRIGGERS -- "mark completed" --> EK
+
+    %% External writers
+    IOS -- "edits via iCloud" --> ICLOUD
+    USER -- "edits directly" --> REMINDERS
+
+    %% Persistence
+    RECONCILE --> STATE
+    RECONCILE --> ACTIVITY_LOG
+    ACTIVITY_LOG --> ACTIVITY
+
+    %% Styling
+    classDef src fill:#1f6feb,stroke:#0d419d,color:#fff
+    classDef store fill:#7c3aed,stroke:#4c1d95,color:#fff
+    classDef daemon fill:#059669,stroke:#064e3b,color:#fff
+    classDef list fill:#f59e0b,stroke:#78350f,color:#fff
+    classDef ext fill:#64748b,stroke:#1e293b,color:#fff
+    class BD,KANBAN src
+    class STATE,ACTIVITY_LOG,REMINDERS,ICLOUD store
+    class WATCHER,SYNC,MASTER,SETTINGS,META,ACTIVITY,RECONCILE,BODY,MARKERS,LAUNCH,BEADS_API daemon
+    class L_PROJ,L_SET,L_DOC,L_LOG,L_PRJ,L_CLAUDE,L_CODEX list
+    class TRIGGERS daemon
+    class IOS,USER,GHOSTTY,EK,NC ext

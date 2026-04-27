@@ -1,0 +1,142 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Role
+
+Bridge: Beads ↔ Apple Reminders. One reminder per bead, one list per project. Beads is the source of truth; Reminders is a view + note surface.
+
+## Commands
+
+Dev workflow uses `uv`. Package installs are implicit via `uv run`.
+
+```bash
+uv run bbridge doctor    # verify bd CLI, Reminders permission, registry reachable
+uv run bbridge sync      # one-shot reconcile (safe, idempotent)
+uv run bbridge run       # foreground poll loop
+uv run bbridge status    # registry + link counts per project
+uv run bbridge lint      # diagnose drift, orphans, missing tags
+```
+
+Daemon runs under launchd. After editing any module, reload:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.jurrejan.beads-bridge.plist
+launchctl load   ~/Library/LaunchAgents/com.jurrejan.beads-bridge.plist
+tail -f ~/Library/Logs/beads-bridge.log
+```
+
+No test suite, linter, or formatter configured. Validate changes by running `bbridge sync` against a real project and inspecting output of `bbridge lint`. For `body.py` edits specifically, the compose → parse → compose roundtrip and the tamper / banner-drop paths are the only contract that matters.
+
+The project lives inside the parent `python/` monorepo. `git add -A` from here stages the whole parent. Always scope: `git add reminders-beads-bridge/<files>`.
+
+## Architecture
+
+Every poll cycle runs `daemon.sync_once()`, which:
+
+1. Reads the beads-kanban registry (`~/.beads-kanban-projects.json`) via `projects.py`, filtering to directories that have `.beads/`.
+2. Calls `projects_list.sync()` once to refresh the `{prefix}Projects` list (one reminder per project, completed = hidden) and returns the hidden set; then calls `projects_list.apply_hides()` to delete reminders lists for hidden projects and drop their state entries. The daemon iterates only visible projects.
+3. Calls `readme.sync()` once to refresh the `{prefix}Readme` list (README + this file pinned as reminders).
+4. For each visible project, calls `reconcile_project()`, which:
+   - Shells out `bd list --json --all` (`beads.py`).
+   - Fetches the matching Reminders list via EventKit (`reminders.py`).
+   - Resolves each bead → reminder through three ordered lookups: state-file link, title-prefix match (adoption + dedup), else create.
+   - Composes expected body via `body.py` (XML-tagged: `<bb:meta>`, `<bb:desc>`, `<bb:notes>`, optional `<bb:restored>` banner).
+   - Diffs expected vs actual into a `Batch` (creates / updates / deletes) and commits via a single EventKit transaction.
+   - Detects completed reminders → calls `bd close`.
+   - Prunes reminders whose bead disappeared.
+4. Persists the state map (`~/.claude/beads-bridge-state.json`) linking bead IDs to EventKit reminder IDs.
+
+Key invariants the architecture depends on:
+- Title format `{bead-id}: {title}` — `index_by_bead_id` parses this to adopt pre-existing reminders.
+- Body is fully managed except `<bb:notes>`. Any drift in `<bb:meta>` / `<bb:desc>` is treated as tamper.
+- Reconcile is idempotent. A clean sync should log zero changes.
+- There is no event channel from beads; freshness = poll interval (launchd overrides default 30 to 5s).
+
+### HTTP plumbing (inert; not wired into daemon)
+
+`api.py` and `events.py` wrap the beads-kanban HTTP API (`_management/beads-kanban/docs/API.md`): typed client + SSE consumer with polling fallback. Configured via `BBRIDGE_API_URL` / `BBRIDGE_API_TIMEOUT_S`. The daemon still uses `bd` CLI — the client exists so future work can replace `bd list --json --all` with `GET /api/issues?project=…`, subscribe to `issue.*` events instead of polling, and surface agent-session / comment metadata without changing the body contract. No call sites in daemon today. `bbridge doctor` probes `/api/agent/health` + `/api/cwd`; failure is non-fatal.
+
+Agent-control surface exposed and partially wired:
+
+- `!agent` marker in `<bb:notes>` → daemon scans on every cycle (`body.consume_agent_markers`) and dispatches via `_dispatch_agent_marker` in `daemon.py`. Worker is best-effort started (`agent_worker("start")`, errors swallowed) then session is enqueued via `agents_start`. Marker line is rewritten into `<bb:agent queued=… at=…/>` on success or `<bb:agent error=… at=…/>` on API failure. Activity log records `agent-queued` / `agent-error`.
+
+### Standalone session triggers (no beads coupling)
+
+`triggers.py` owns two lists, `Claude: Sessions` and `Codex: Sessions` (overridable via `BBRIDGE_CLAUDE_LIST` / `BBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
+- Title → prompt.
+- Body line `cwd: <path>` (optional, `~` expanded) → working directory; default `$HOME`.
+- Remaining body lines → appended to the prompt.
+
+`daemon.sync_once` calls `triggers.process_all()` once per cycle, after the readme/activity/projects-list/settings sweeps but **outside** `reconcile_project`. For each pending reminder it calls `launch.launch(cwd, prompt, cmd="claude"|"codex")` (Ghostty path from `BBRIDGE_GHOSTTY_BIN` or `/Applications/Ghostty.app/Contents/MacOS/ghostty`, binaries from `BBRIDGE_CLAUDE_BIN` / `BBRIDGE_CODEX_BIN`), marks the reminder completed, and records `claude-launched` / `codex-launched` in the activity log. Failed launches stay unchecked and get retried next cycle. No bead state, no project visibility, no `body.py` involvement.
+
+Other client surface (still not wired):
+- `Client.agent_worker(action)` — POST /api/agent {action: start|stop|restart}.
+- `Client.agents_start(project, ticket_id, **opts)` — POST /api/agents to launch a coding session against a ticket (opts: useWorktree, model).
+- `Client.agent_message(session_id, text)` — inject a user message into a running session.
+- `Client.agent_session_history(session_id, project, since=None)` — GET /api/agent-sessions/:id/history; `since=<idx>` is a polling fallback (server-side filter still pending in beads-kanban — see API.md gap).
+- `Client.agent_interrupt(session_id)` — DELETE /api/agents/:id.
+- `events.SSEClient` — live event stream; per-session frames require the worker WebSocket on :9347 (HTTP only exposes the snapshot).
+
+## Sync rules
+
+### Source-of-truth (one-way, with three exceptions)
+- Bead fields (title / description / priority / status / type) → reminder. Never the reverse.
+- `<bb:notes>` is reminder-owned, preserved across syncs.
+- Reminder → bead signals (the only ones):
+  - Completed reminder → `bd close`. Edge: only fires on a False→True transition (`fresh_completion = rem.completed and not link.reminder_completed`), so a closed bead doesn't get re-closed every poll.
+  - Uncompleted closed reminder → `bd reopen`. Symmetric edge: `fresh_reopen = (not rem.completed) and link.reminder_completed`.
+  - **New reminder with no `bd-id:` prefix in a project list → `bd create`** (capture). Title becomes the bead title; reminder body becomes the bead description; priority defaults to p2. The reminder is then renamed to `{bead-id}: {title}` and its body restructured on the same cycle.
+
+### Capture rules (R→B)
+- Skip if title has `{prefix}: ` (already managed), if completed (don't capture+immediately close), or if reminder is already linked.
+- Capture lists: only `{BBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`Readme`) or activity log (`Activity`).
+- Failure mode: `bd create` exception → log warning, skip; reminder stays unprefixed and gets retried next cycle.
+- State persisted right after capture (before the EventKit batch) so a crash between create and rename does not double-create on retry.
+
+### Body syntax (enforced by `body.py`)
+```
+<bb:meta>[<type> · p<0-3> · <status>]</bb:meta>
+
+<bb:desc>
+<bead description verbatim>
+</bb:desc>
+
+<bb:notes>
+<user-editable free text>
+</bb:notes>
+```
+Optional prefix `<bb:restored at="ISO">msg</bb:restored>` — present only after tamper detected; auto-drops on the next clean sync. Title is exactly `{bead-id}: {bead-title}`.
+
+### Tamper handling
+On tamper (meta / desc diverge from bead, or tags missing), rewrite body from bead state, preserve `<bb:notes>`, prepend the `<bb:restored>` banner. The banner itself is informational, not tamper — the next sync drops it. If notes are unparseable, notes become empty (don't fail).
+
+### Info list
+`{prefix}Readme` holds two reminders (README, CLAUDE.md) as verbatim file contents. Overwritten on drift. Completion is user-owned; `readme.py` does not reset it. Do not store bead data here. Legacy suffixes `__info__` and `CLAUDE.MD READ ME` are deleted on startup (see `_LEGACY_SUFFIXES` in `readme.py`).
+
+### Projects list
+`{prefix}Projects` (managed by `projects_list.py`) holds one reminder per registered project. Completed reminder = project is hidden; unchecked = synced normally. Body is overwritten on drift; completion state is user-owned and is the only signal the daemon reads back. Reminders for unknown project names get pruned.
+
+When a project is hidden, `daemon.sync_once` actively deletes its `{prefix}{project}` Reminders list (via `reminders.delete_list`) and drops its entry from the state map. This is destructive: any free-form text inside `<bb:notes>` is lost — bead state itself is unaffected. Unhide → next sync recreates the list and links from beads. The destructive choice is intentional: the goal of hiding is to drop the project from agent context, not just freeze it.
+
+### Settings list
+`{prefix}Settings` (managed by `settings.py`) holds one reminder per global toggle. Completed = enabled, unchecked = disabled. Add new toggles by appending a `Setting(key, title, body, default)` to `SETTINGS` in `settings.py` and reading the returned dict in `daemon.sync_once`. Title and body are overwritten on drift; completion is user-owned. Unknown reminders are pruned. Current toggles:
+- `show_completed` — when enabled, closed beads are surfaced as completed reminders in their project list. When disabled (default), closed beads are pruned from project lists (linked reminder gets deleted next sync). Bead state itself is unaffected; this only controls whether they appear in Reminders.
+
+When `show_completed=False`, `reconcile_project` short-circuits closed beads at the top of the issue loop: it deletes any linked reminder, drops the link, and skips create logic. When `True`, closed beads are syncable, and creates pre-set the EventKit `completed` flag so the new reminder lands already checked.
+
+### Activity log
+`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden). Backed by `~/.claude/beads-bridge-activity.jsonl` (override `BBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
+
+### Lint
+`bbridge lint` is read-only. Codes: `missing-meta`, `missing-desc`, `missing-notes`, `bad-status`, `drift`, orphan. The daemon does not fail-stop on lint issues; it rewrites on the next sync.
+
+## Constraints for agents editing this repo
+
+- Sync directions are fixed: B→R for fields, R→B for completion (`bd close`), uncomplete (`bd reopen`), and capture (`bd create`). Do not add more without explicit approval.
+- Do not parse `<bb:notes>` for structured data; it is free-form user text.
+- Do not touch reminders outside `{BBRIDGE_LIST_PREFIX}{project}` lists.
+- iOS Claude / external agents: write into `Beads: <project>` lists for capture, never into `Readme` or `Activity` (drift gets overwritten silently).
+- Do not add new `<bb:*>` tags without updating `body.py` parser, lint codes, and this doc together.
+- New bead status values: add to `VALID_STATUSES` in `body.py` and the README env-var section.
+- Keep modules under ~150 lines. `body.py` owns all body concerns; `readme.py` owns the info list.
+- `body.py` change: verify compose → parse roundtrip, tamper detection, and banner drop by composing twice against the same bead.

@@ -1,0 +1,17 @@
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+
+# Beads runtime files (per-machine state)
+.beads/dolt-server.port
+.beads/dolt/
+.beads/*.db*
