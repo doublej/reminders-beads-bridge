@@ -15,3 +15,8 @@ __pycache__/
 .beads/dolt-server.port
 .beads/dolt/
 .beads/*.db*
+.env
+node_modules/
+target/
+dist/
+build/
