@@ -65,9 +65,14 @@ Agent-control surface exposed and partially wired:
 `triggers.py` owns two lists, `Claude: Sessions` and `Codex: Sessions` (overridable via `BBRIDGE_CLAUDE_LIST` / `BBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
 - Title → prompt.
 - Body line `cwd: <path>` (optional, `~` expanded) → working directory; default `$HOME`.
+- Body line `capture: true` (optional) → run in capture mode (see below).
 - Remaining body lines → appended to the prompt.
 
-`daemon.sync_once` calls `triggers.process_all()` once per cycle, after the readme/activity/projects-list/settings sweeps but **outside** `reconcile_project`. For each pending reminder it calls `launch.launch(cwd, prompt, cmd="claude"|"codex")` (Ghostty path from `BBRIDGE_GHOSTTY_BIN` or `/Applications/Ghostty.app/Contents/MacOS/ghostty`, binaries from `BBRIDGE_CLAUDE_BIN` / `BBRIDGE_CODEX_BIN`), marks the reminder completed, and records `claude-launched` / `codex-launched` in the activity log. Failed launches stay unchecked and get retried next cycle. No bead state, no project visibility, no `body.py` involvement.
+Two execution modes:
+
+1. **Interactive (default)** — `daemon.sync_once` calls `triggers.process_all()` once per cycle. Each pending reminder is launched via `launch.launch(cwd, prompt, cmd="claude"|"codex")` which spawns a new Ghostty window via `open -na /Applications/Ghostty.app --args …` (override the bundle with `BBRIDGE_GHOSTTY_APP`; binaries via `BBRIDGE_CLAUDE_BIN` / `BBRIDGE_CODEX_BIN`). The reminder is marked completed and activity records `claude-launched` / `codex-launched`. Failed launches stay unchecked and get retried.
+
+2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/bbridge-capture-<reminder>.out`. State lives in `~/.claude/beads-bridge-captures.json` (override `BBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `BBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
 
 Other client surface (still not wired):
 - `Client.agent_worker(action)` — POST /api/agent {action: start|stop|restart}.
