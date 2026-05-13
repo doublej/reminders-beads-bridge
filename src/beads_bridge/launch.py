@@ -1,25 +1,21 @@
 """Spawn a Claude Code or Codex session in a new Ghostty window with a prefilled prompt."""
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
-_GHOSTTY_APP = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
+_GHOSTTY_APP_BUNDLE = "/Applications/Ghostty.app"
 
 
-def ghostty_bin() -> str:
-    override = os.getenv("BBRIDGE_GHOSTTY_BIN")
+def ghostty_bundle() -> str:
+    override = os.getenv("BBRIDGE_GHOSTTY_APP")
     if override and Path(override).exists():
         return override
-    if Path(_GHOSTTY_APP).exists():
-        return _GHOSTTY_APP
-    found = shutil.which("ghostty")
-    if found:
-        return found
+    if Path(_GHOSTTY_APP_BUNDLE).exists():
+        return _GHOSTTY_APP_BUNDLE
     raise RuntimeError(
-        "Ghostty not found. Install Ghostty.app, set BBRIDGE_GHOSTTY_BIN, "
-        "or put `ghostty` on $PATH."
+        "Ghostty.app not found at /Applications/Ghostty.app. "
+        "Install it or set BBRIDGE_GHOSTTY_APP to its .app path."
     )
 
 
@@ -33,7 +29,17 @@ def session_bin(cmd: str) -> str:
 
 
 def launch(cwd: Path, prompt: str, *, cmd: str = "claude") -> None:
-    args = [ghostty_bin(), f"--working-directory={cwd}", "-e", session_bin(cmd)]
+    bundle = ghostty_bundle()
+    inner = [session_bin(cmd)]
     if prompt:
-        args.append(prompt)
+        inner.append(prompt)
+    args = [
+        "/usr/bin/open",
+        "-na",
+        bundle,
+        "--args",
+        f"--working-directory={cwd}",
+        "-e",
+        *inner,
+    ]
     subprocess.Popen(args, start_new_session=True)
