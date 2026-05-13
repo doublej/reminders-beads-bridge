@@ -8,6 +8,7 @@ from . import agent_marker as agent_marker_module
 from . import api as api_module
 from . import beads as beads_module
 from . import body as body_module
+from . import captures as captures_module
 from . import config as config_module
 from . import link as link_module
 from . import projects_list as projects_list_module
@@ -361,6 +362,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
         client = api_module.Client(base_url=cfg.api_url, timeout_s=cfg.api_timeout_s)
         _safe("Readme list sync", readme_module.sync, cfg.list_prefix)
         _safe("Activity list sync", _run_activity, cfg.list_prefix)
+        _safe("Capture poll", captures_module.poll)
         _safe("Trigger lists sync", _run_triggers)
         _safe("Apply hides", projects_list_module.apply_hides, active, hidden, state, cfg.state_path)
         show_completed = settings.get("show_completed", False)

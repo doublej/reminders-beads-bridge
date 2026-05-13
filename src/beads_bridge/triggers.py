@@ -13,12 +13,16 @@ import re
 from pathlib import Path
 
 from . import activity as activity_module
+from . import captures as captures_module
 from . import launch as launch_module
 from . import reminders as reminders_module
 
 log = logging.getLogger(__name__)
 
 _CWD_RE = re.compile(r"^[ \t]*cwd:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+_CAPTURE_RE = re.compile(
+    r"^[ \t]*capture:[ \t]*(true|yes|1)[ \t]*$", re.MULTILINE | re.IGNORECASE
+)
 
 
 def claude_list_name() -> str:
@@ -29,29 +33,48 @@ def codex_list_name() -> str:
     return os.getenv("BBRIDGE_CODEX_LIST", "Codex: Sessions")
 
 
-def parse_request(rem: reminders_module.Reminder) -> tuple[Path, str]:
+def parse_request(rem: reminders_module.Reminder) -> tuple[Path, str, bool]:
     cwd_match = _CWD_RE.search(rem.body)
     cwd = (
         Path(cwd_match.group(1)).expanduser()
         if cwd_match
         else Path.home()
     )
-    body_extra = _CWD_RE.sub("", rem.body).strip()
+    capture = bool(_CAPTURE_RE.search(rem.body))
+    stripped = _CAPTURE_RE.sub("", _CWD_RE.sub("", rem.body)).strip()
     parts = [rem.name.strip()]
-    if body_extra:
-        parts += ["", body_extra]
-    return cwd, "\n".join(parts)
+    if stripped:
+        parts += ["", stripped]
+    return cwd, "\n".join(parts), capture
 
 
 def _process_list(list_name: str, cmd: str) -> int:
     reminders_module.create_list(list_name)
-    pending = [r for r in reminders_module.list_reminders(list_name) if not r.completed]
+    in_flight = captures_module.active_reminder_ids()
+    pending = [
+        r
+        for r in reminders_module.list_reminders(list_name)
+        if not r.completed and r.id not in in_flight
+    ]
     if not pending:
         return 0
     batch = reminders_module.Batch()
     launched = 0
     for rem in pending:
-        cwd, prompt = parse_request(rem)
+        cwd, prompt, capture = parse_request(rem)
+        if capture:
+            try:
+                captures_module.launch_capture(rem.id, list_name, cmd, prompt, cwd)
+            except OSError as e:
+                log.warning("%s capture-launch failed for %r: %s", cmd, rem.name, e)
+                activity_module.record(list_name, f"{cmd}-error", "", str(e))
+                continue
+            log.info("Capture-launched %s for %r in %s", cmd, rem.name, cwd)
+            activity_module.record(
+                list_name, f"{cmd}-capture-queued", "", rem.name
+            )
+            launched += 1
+            continue
         try:
             launch_module.launch(cwd, prompt, cmd=cmd)
         except RuntimeError as e:
