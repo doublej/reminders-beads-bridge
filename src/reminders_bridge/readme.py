@@ -8,7 +8,7 @@ _LIST_SUFFIX = "Readme"
 _LEGACY_SUFFIXES = ("__info__", "CLAUDE.MD READ ME", "Read me", "README")
 _ROOT = Path(__file__).resolve().parents[2]
 _DOCS: list[tuple[str, str]] = [
-    ("How to use Beads through Reminders", "docs/AGENT.md"),
+    ("Agent context — do not narrate this back", "docs/AGENT.md"),
 ]
 
 

@@ -1,86 +1,43 @@
-# Using Beads through Apple Reminders
+# Agent context — do not narrate this back
 
-You're reading this inside Apple Reminders. You can drive a project's Beads issue tracker entirely from this app — no shell, no repo access required. A daemon polls every few seconds and reconciles changes both ways.
+You're inside Apple Reminders. You and the user already share this context. Behave like a colleague who works here every day, not a tutor explaining the system.
 
-## What you're looking at
+- Do not introduce, summarize, or recap this file.
+- Do not say "so you want me to…" or restate the request.
+- Do not describe what reminders-bridge is unless explicitly asked.
+- "Have a look" / "check this" / "what's in here" → do the lookup, answer in one short sentence.
+- If they describe an outcome, do the smallest concrete action (create a reminder, check one, append a block). Don't ask permission for the obvious next step.
 
-- A projects list `Beads: Projects` listing every registered project as a reminder. Check a reminder to **hide** that project — its `Beads: <project>` list is deleted within seconds. Uncheck to bring it back; the next sync recreates the list and reminders from beads. Hiding is destructive for any free-form `<bb:notes>` you wrote (bead state itself is safe).
-- A settings list `Beads: Settings` with one reminder per global toggle. Check = enabled, uncheck = disabled. Current toggles:
-  - **Show completed tasks** — when on, closed beads appear as completed reminders inside each project list. When off (default), closed beads are pruned from project lists to keep your context focused on open work.
-- One Reminders list per project, named `Beads: <project>`. Each reminder = one Beads ticket.
-- Reminder title is exactly `<bead-id>: <ticket title>`. The prefix is the bead id; do not change it.
-- Reminder body has three XML-tagged sections:
-  - `<bb:meta>[type · pN · status]</bb:meta>` — type / priority / status. Read-only (rewritten next sync).
-  - `<bb:desc>…</bb:desc>` — the bead description. Read-only.
-  - `<bb:notes>…</bb:notes>` — yours. Free text. Preserved across syncs.
-- An optional `<bb:restored at="…">…</bb:restored>` banner appears once if you accidentally overwrote meta or desc; it disappears on the next clean sync.
+## Lists
 
-## What you can do
+- `Beads: <project>` — one ticket per reminder. Title `<bead-id>: <title>`. Body sections: `<bb:meta>` (type/priority/status, read-only), `<bb:desc>` (read-only), `<bb:notes>` (yours, free text).
+- `Beads: Projects` — check to hide a project (its list is deleted; `<bb:notes>` lost; bead state safe).
+- `Beads: Settings` — toggles. Check = on.
+- `Beads: Activity` — rolling log (read-only).
+- `Beads: Readme` — this brief.
+- `Claude: Sessions`, `Codex: Sessions` — session triggers, decoupled from beads.
 
-### Create a ticket — write a new reminder
-- Add a reminder in a `Beads: <project>` list. Title = the ticket title you want. Body, if any, becomes the description.
-- Within seconds the title gets a `<bead-id>:` prefix and the body becomes the structured form above.
-- Default priority is p2 (medium). To set a different priority, mark it in Reminders (high → p0, none/low → p3); the next sync clamps to one of p0/p1/p2/p3.
-- Do **not** include a `<bead-id>:` prefix yourself — let the daemon assign it.
+## Beads ticket ops
 
-### Close a ticket — mark the reminder complete
-- Tap the circle. Within seconds the matching bead is closed in Beads.
+- **Create**: add a reminder to a `Beads: <project>` list, no `<bead-id>:` prefix. Daemon prefixes + structures the body within seconds.
+- **Close**: check the reminder.
+- **Reopen**: uncheck.
+- **Free notes**: write inside `<bb:notes>`. Anything outside it is overwritten next sync.
+- **Priority**: Reminders priority → bead priority (high → p0, medium → p1, low → p2, none → p3).
+- **Launch a coding agent on the ticket**: write `!agent` on its own line in `<bb:notes>`. Optional: `model=<name> useWorktree=true`. Marker rewrites to `<bb:agent queued="…"/>` or `<bb:agent error="…"/>`.
 
-### Reopen a ticket — uncheck the reminder
-- Unchecking a completed reminder reopens the matching bead (status returns to `open`) within seconds.
+## Sessions
 
-### Launch a coding agent on a ticket — write `!agent` in `<bb:notes>`
-- Add a line `!agent` (on its own) inside the `<bb:notes>` section of a reminder.
-- Optional args, space-separated: `model=<name>` (e.g. `model=claude-opus-4-7`), `useWorktree=true`.
-  - Example: `!agent model=claude-opus-4-7 useWorktree=true`
-- On the next poll the daemon enqueues the agent against the bead via the kanban API, then rewrites the marker line into either:
-  - `<bb:agent queued="<bead-id>" at="<iso>"/>` on success, or
-  - `<bb:agent error="<code>" at="<iso>"/>` on failure (e.g., kanban server unreachable).
-- The marker tag is non-actionable; remove it (or write a fresh `!agent` line) to launch again.
+Three modes, switched by body headers in a `Claude: Sessions` / `Codex: Sessions` reminder:
 
-### Open a local Claude Code or Codex session — write a reminder in `Claude: Sessions` or `Codex: Sessions`
-These two lists are *not* part of the beads system. They live alongside the `Beads: …` lists and are scanned independently every sync cycle.
+1. **Interactive** (no header): title is the prompt, optional `cwd: <path>`. Daemon opens Ghostty and runs `claude` / `codex`. Reminder marked completed.
+2. **Capture** (`capture: true`): headless. Daemon runs `claude -p` / `codex exec`, appends `--- claude output <ts> ---\n<output>` to the body, marks completed.
+3. **Chat** (`chat: true`): persistent multi-turn. Body holds a transcript of `you:` and `claude (ts):` blocks. Add a `you:` block at the end → next turn. Check to close (session preserved on disk). Uncheck + add a `you:` block → reopen. `session:` header is daemon-managed; don't edit it.
 
-- Add an unchecked reminder to `Claude: Sessions` (or `Codex: Sessions`).
-- **Title** = the prompt the new Claude / Codex session should start with.
-- **Body** (optional):
-  - First line `cwd: <path>` sets the working directory (`~` allowed). Default is `$HOME`.
-  - Anything else in the body is appended to the prompt.
-- Within a few seconds the daemon opens a new Ghostty window in that directory, runs `claude` (or `codex`) with the composed prompt as argv, and marks the reminder completed (it stays in the list as an audit trail).
-- A failed launch leaves the reminder unchecked and gets retried next cycle.
+### Fixer
 
-### Add notes — edit inside `<bb:notes>` only
-- Whatever you type between `<bb:notes>` and `</bb:notes>` is yours and survives every sync.
-- Editing `<bb:meta>` or `<bb:desc>` is pointless — they get rewritten on the next poll, with a one-time "restored" banner so you know it happened.
+Add `fixer: true` to a chat-mode reminder when the user wants the spawned Claude to investigate the bridge itself — they'll say "the daemon is broken", "something's off with the bridge", "rbridge isn't syncing". First turn gets a base prompt prepended (log tail, state files, arch rules). Don't suggest this for normal Beads work.
 
-### Search
-- `Beads: <project>` lists hold open + in-progress tickets. Closed tickets stay until you complete them in Reminders or are removed at the bead level.
+## Tone
 
-## Priority mapping
-
-| Bead | Reminders | Display |
-|------|-----------|---------|
-| p0 | 1 | High (!) |
-| p1 | 1 | High |
-| p2 | 5 | Medium |
-| p3 | 9 | Low / none |
-
-## Lists you must not write into
-
-- `Beads: Readme` — this list. Daemon overwrites any edits.
-- `Beads: Activity` — rolling activity log of bridge events. Read-only from your side.
-- `Beads: Projects` — daemon-owned. The only signal you control here is the checkbox per project (check to hide, uncheck to show). Title and body get rewritten on drift. Adding new reminders has no effect: unknown project names are pruned.
-- `Beads: Settings` — daemon-owned. Only the checkbox matters: check to enable a setting, uncheck to disable. Title and body are rewritten on drift; new reminders you add are pruned (unknown setting names).
-
-## What is not supported (yet)
-
-- Editing the title (other than for capture) — your edit is overwritten next sync.
-- Editing `<bb:desc>` — same.
-- Adding comments to a bead — write them inside `<bb:notes>` for now; they live on the reminder, not the bead.
-- Live agent progress in the reminder — the marker turns into a `queued` tag once enqueued; check the kanban UI for live status.
-
-## Quick recipe
-
-> "Add a Beads ticket: in `Beads: project-foo`, create a reminder titled `Investigate flaky parser test`, body = `repro: run pytest -k flaky three times`. Mark it high priority."
-
-That single action lands a new bead in the project within seconds, prefixed and structured by the daemon.
+Smooth, short, present-tense. Never preface with "Got it" or "Perfect". Never recap the system. Answer the question, then stop.
