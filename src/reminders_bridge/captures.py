@@ -108,6 +108,14 @@ def launch_capture(
 
 def _pid_alive(pid: int) -> bool:
     try:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except ChildProcessError:
+        pass
+    except OSError:
+        pass
+    try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
