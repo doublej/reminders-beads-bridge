@@ -88,6 +88,32 @@ extra context goes here, anything below the cwd line is appended to the prompt
 
 Binaries: `claude` / `codex` on `$PATH` (override with `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`). Ghostty: `/Applications/Ghostty.app/Contents/MacOS/ghostty` (override with `RBRIDGE_GHOSTTY_BIN`).
 
+### Chat-mode sessions (multi-turn, body-driven)
+
+Add `chat: true` to a `Claude: Sessions` reminder body and the reminder becomes a persistent conversation you drive entirely from Reminders.app. Body format:
+
+```
+cwd: ~/Documents/development/python/reminders-bridge
+chat: true
+session: <uuid>          # daemon adds this after the first turn
+
+you:
+first prompt
+
+claude (timestamp):
+response 1
+
+you:
+follow-up prompt
+```
+
+- **Start** — create a reminder with `chat: true` and a first `you:` block (or just write the prompt under the headers). Daemon runs `claude -p --output-format json`, writes back the response and the new `session:` id.
+- **Give feedback / run commands** — append another `you:` block at the end of the body. Daemon detects the unanswered block and continues via `claude -p --resume <session>`. Claude's full tool set (Bash, Read, Edit, …) is available — ask it to run a command and the response gets written back as the next `claude (…):` block.
+- **Close** — check the reminder. Daemon skips it. The session JSONL stays on disk under `~/.claude/projects/`.
+- **Reopen** — uncheck and append a new `you:` block. Daemon resumes the same session id and keeps the conversation going.
+
+Hard timeout per turn: `RBRIDGE_SESSIONS_TIMEOUT_S` (default 900s). Extra CLI flags (e.g. `--allowedTools`, `--dangerously-skip-permissions`) can be injected via `RBRIDGE_CLAUDE_FLAGS`.
+
 ## Launch at login
 
 ```bash

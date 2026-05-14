@@ -16,6 +16,7 @@ from . import activity as activity_module
 from . import captures as captures_module
 from . import launch as launch_module
 from . import reminders as reminders_module
+from . import sessions as sessions_module
 
 log = logging.getLogger(__name__)
 
@@ -50,11 +51,11 @@ def parse_request(rem: reminders_module.Reminder) -> tuple[Path, str, bool]:
 
 def _process_list(list_name: str, cmd: str) -> int:
     reminders_module.create_list(list_name)
-    in_flight = captures_module.active_reminder_ids()
+    in_flight = captures_module.active_reminder_ids() | sessions_module.active_reminder_ids()
     pending = [
         r
         for r in reminders_module.list_reminders(list_name)
-        if not r.completed and r.id not in in_flight
+        if not r.completed and r.id not in in_flight and not sessions_module.is_chat(r.body)
     ]
     if not pending:
         return 0
