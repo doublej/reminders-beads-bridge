@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.jurrejan.beads-bridge</string>
+	<string>com.jurrejan.reminders-bridge</string>
 
 	<key>ProgramArguments</key>
 	<array>
 		<string>/opt/homebrew/bin/uv</string>
 		<string>run</string>
 		<string>--directory</string>
-		<string>/Users/jurrejan/Documents/development/python/reminders-beads-bridge</string>
-		<string>bbridge</string>
+		<string>/Users/jurrejan/Documents/development/python/reminders-bridge</string>
+		<string>rbridge</string>
 		<string>run</string>
 	</array>
 
@@ -22,10 +22,10 @@
 	<true/>
 
 	<key>StandardOutPath</key>
-	<string>/Users/jurrejan/Library/Logs/beads-bridge.log</string>
+	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
 
 	<key>StandardErrorPath</key>
-	<string>/Users/jurrejan/Library/Logs/beads-bridge.log</string>
+	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
 
 	<key>EnvironmentVariables</key>
 	<dict>
@@ -33,7 +33,7 @@
 		<string>/Users/jurrejan</string>
 		<key>PATH</key>
 		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-		<key>BBRIDGE_POLL_S</key>
+		<key>RBRIDGE_POLL_S</key>
 		<string>5</string>
 	</dict>
 </dict>

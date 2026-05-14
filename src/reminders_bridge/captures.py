@@ -23,11 +23,11 @@ log = logging.getLogger(__name__)
 
 _STATE_PATH = Path(
     os.getenv(
-        "BBRIDGE_CAPTURE_STATE",
-        str(Path.home() / ".claude/beads-bridge-captures.json"),
+        "RBRIDGE_CAPTURE_STATE",
+        str(Path.home() / ".claude/reminders-bridge-captures.json"),
     )
 )
-_TIMEOUT_S = int(os.getenv("BBRIDGE_CAPTURE_TIMEOUT_S", "1800"))
+_TIMEOUT_S = int(os.getenv("RBRIDGE_CAPTURE_TIMEOUT_S", "1800"))
 
 
 @dataclass
@@ -73,7 +73,7 @@ def _build_argv(cmd: str, prompt: str) -> list[str]:
 def launch_capture(
     reminder_id: str, list_name: str, cmd: str, prompt: str, cwd: Path
 ) -> None:
-    out_path = f"/tmp/bbridge-capture-{reminder_id.replace('/', '_')}.out"
+    out_path = f"/tmp/rbridge-capture-{reminder_id.replace('/', '_')}.out"
     fh = open(out_path, "w")
     try:
         proc = subprocess.Popen(

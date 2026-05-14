@@ -31,11 +31,11 @@ Hiding a project via `Beads: Projects` is **destructive** for any free-form text
 ## Quick start
 
 ```bash
-cd ~/Documents/development/python/reminders-beads-bridge
+cd ~/Documents/development/python/reminders-bridge
 uv sync
-uv run bbridge doctor
-uv run bbridge sync      # one-shot reconcile
-uv run bbridge run       # persistent poll loop
+uv run rbridge doctor
+uv run rbridge sync      # one-shot reconcile
+uv run rbridge run       # persistent poll loop
 ```
 
 ## Requirements
@@ -48,29 +48,29 @@ uv run bbridge run       # persistent poll loop
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `BBRIDGE_REGISTRY` | `~/.beads-kanban-projects.json` | Project registry path |
-| `BBRIDGE_STATE` | `~/.claude/beads-bridge-state.json` | Link map persistence |
-| `BBRIDGE_POLL_S` | `30` | Poll interval (seconds). launchd plist overrides to `5`. |
-| `BBRIDGE_LIST_PREFIX` | `Beads: ` | Reminders list prefix (per project) |
-| `BBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
-| `BBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
-| `BBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
+| `RBRIDGE_REGISTRY` | `~/.beads-kanban-projects.json` | Project registry path |
+| `RBRIDGE_STATE` | `~/.claude/reminders-bridge-state.json` | Link map persistence |
+| `RBRIDGE_POLL_S` | `30` | Poll interval (seconds). launchd plist overrides to `5`. |
+| `RBRIDGE_LIST_PREFIX` | `Beads: ` | Reminders list prefix (per project) |
+| `RBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
+| `RBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
+| `RBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
 
 ## Commands
 
-- `bbridge run` — Daemon: poll registry, reconcile every `BBRIDGE_POLL_S` seconds.
-- `bbridge sync` — One-shot reconcile, print visible project count.
-- `bbridge status` — Print registry + projects/settings list state + link counts per project (with `[hidden]` / `[visible]` flag).
-- `bbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
-- `bbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API.
+- `rbridge run` — Daemon: poll registry, reconcile every `RBRIDGE_POLL_S` seconds.
+- `rbridge sync` — One-shot reconcile, print visible project count.
+- `rbridge status` — Print registry + projects/settings list state + link counts per project (with `[hidden]` / `[visible]` flag).
+- `rbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
+- `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API.
 ## Triggering a Claude Code or Codex session (independent of beads)
 
 Two extra reminders lists, completely separate from the beads sync, drive local Claude / Codex sessions:
 
 | List | Engine | Default name |
 |------|--------|--------------|
-| `Claude: Sessions` | `claude` | `BBRIDGE_CLAUDE_LIST` to override |
-| `Codex: Sessions`  | `codex`  | `BBRIDGE_CODEX_LIST` to override |
+| `Claude: Sessions` | `claude` | `RBRIDGE_CLAUDE_LIST` to override |
+| `Codex: Sessions`  | `codex`  | `RBRIDGE_CODEX_LIST` to override |
 
 Each unchecked reminder is a pending session request:
 
@@ -86,11 +86,11 @@ cwd: ~/Documents/development/python/foo
 extra context goes here, anything below the cwd line is appended to the prompt
 ```
 
-Binaries: `claude` / `codex` on `$PATH` (override with `BBRIDGE_CLAUDE_BIN` / `BBRIDGE_CODEX_BIN`). Ghostty: `/Applications/Ghostty.app/Contents/MacOS/ghostty` (override with `BBRIDGE_GHOSTTY_BIN`).
+Binaries: `claude` / `codex` on `$PATH` (override with `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`). Ghostty: `/Applications/Ghostty.app/Contents/MacOS/ghostty` (override with `RBRIDGE_GHOSTTY_BIN`).
 
 ## Launch at login
 
 ```bash
-cp launchd/com.jurrejan.beads-bridge.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.jurrejan.beads-bridge.plist
+cp launchd/com.jurrejan.reminders-bridge.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.jurrejan.reminders-bridge.plist
 ```

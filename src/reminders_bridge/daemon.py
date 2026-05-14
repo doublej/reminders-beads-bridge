@@ -380,7 +380,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
 def run() -> None:
     cfg = config_module.load()
     log.info(
-        "Starting beads-bridge: poll=%ds (fallback) statuses=%s prefix=%r",
+        "Starting reminders-bridge: poll=%ds (fallback) statuses=%s prefix=%r",
         cfg.poll_interval_s,
         cfg.statuses,
         cfg.list_prefix,

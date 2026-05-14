@@ -11,23 +11,23 @@ Bridge: Beads ↔ Apple Reminders. One reminder per bead, one list per project. 
 Dev workflow uses `uv`. Package installs are implicit via `uv run`.
 
 ```bash
-uv run bbridge doctor    # verify bd CLI, Reminders permission, registry reachable
-uv run bbridge sync      # one-shot reconcile (safe, idempotent)
-uv run bbridge run       # foreground poll loop
-uv run bbridge status    # registry + link counts per project
-uv run bbridge lint      # diagnose drift, orphans, missing tags
+uv run rbridge doctor    # verify bd CLI, Reminders permission, registry reachable
+uv run rbridge sync      # one-shot reconcile (safe, idempotent)
+uv run rbridge run       # foreground poll loop
+uv run rbridge status    # registry + link counts per project
+uv run rbridge lint      # diagnose drift, orphans, missing tags
 ```
 
 Daemon runs under launchd. After editing any module, reload:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.jurrejan.beads-bridge.plist
-launchctl load   ~/Library/LaunchAgents/com.jurrejan.beads-bridge.plist
-tail -f ~/Library/Logs/beads-bridge.log
+launchctl unload ~/Library/LaunchAgents/com.jurrejan.reminders-bridge.plist
+launchctl load   ~/Library/LaunchAgents/com.jurrejan.reminders-bridge.plist
+tail -f ~/Library/Logs/reminders-bridge.log
 ```
 
-No test suite, linter, or formatter configured. Validate changes by running `bbridge sync` against a real project and inspecting output of `bbridge lint`. For `body.py` edits specifically, the compose → parse → compose roundtrip and the tamper / banner-drop paths are the only contract that matters.
+No test suite, linter, or formatter configured. Validate changes by running `rbridge sync` against a real project and inspecting output of `rbridge lint`. For `body.py` edits specifically, the compose → parse → compose roundtrip and the tamper / banner-drop paths are the only contract that matters.
 
-The project lives inside the parent `python/` monorepo. `git add -A` from here stages the whole parent. Always scope: `git add reminders-beads-bridge/<files>`.
+The project lives inside the parent `python/` monorepo. `git add -A` from here stages the whole parent. Always scope: `git add reminders-bridge/<files>`.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ Every poll cycle runs `daemon.sync_once()`, which:
    - Diffs expected vs actual into a `Batch` (creates / updates / deletes) and commits via a single EventKit transaction.
    - Detects completed reminders → calls `bd close`.
    - Prunes reminders whose bead disappeared.
-4. Persists the state map (`~/.claude/beads-bridge-state.json`) linking bead IDs to EventKit reminder IDs.
+4. Persists the state map (`~/.claude/reminders-bridge-state.json`) linking bead IDs to EventKit reminder IDs.
 
 Key invariants the architecture depends on:
 - Title format `{bead-id}: {title}` — `index_by_bead_id` parses this to adopt pre-existing reminders.
@@ -54,7 +54,7 @@ Key invariants the architecture depends on:
 
 ### HTTP plumbing (inert; not wired into daemon)
 
-`api.py` and `events.py` wrap the beads-kanban HTTP API (`_management/beads-kanban/docs/API.md`): typed client + SSE consumer with polling fallback. Configured via `BBRIDGE_API_URL` / `BBRIDGE_API_TIMEOUT_S`. The daemon still uses `bd` CLI — the client exists so future work can replace `bd list --json --all` with `GET /api/issues?project=…`, subscribe to `issue.*` events instead of polling, and surface agent-session / comment metadata without changing the body contract. No call sites in daemon today. `bbridge doctor` probes `/api/agent/health` + `/api/cwd`; failure is non-fatal.
+`api.py` and `events.py` wrap the beads-kanban HTTP API (`_management/beads-kanban/docs/API.md`): typed client + SSE consumer with polling fallback. Configured via `RBRIDGE_API_URL` / `RBRIDGE_API_TIMEOUT_S`. The daemon still uses `bd` CLI — the client exists so future work can replace `bd list --json --all` with `GET /api/issues?project=…`, subscribe to `issue.*` events instead of polling, and surface agent-session / comment metadata without changing the body contract. No call sites in daemon today. `rbridge doctor` probes `/api/agent/health` + `/api/cwd`; failure is non-fatal.
 
 Agent-control surface exposed and partially wired:
 
@@ -62,7 +62,7 @@ Agent-control surface exposed and partially wired:
 
 ### Standalone session triggers (no beads coupling)
 
-`triggers.py` owns two lists, `Claude: Sessions` and `Codex: Sessions` (overridable via `BBRIDGE_CLAUDE_LIST` / `BBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
+`triggers.py` owns two lists, `Claude: Sessions` and `Codex: Sessions` (overridable via `RBRIDGE_CLAUDE_LIST` / `RBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
 - Title → prompt.
 - Body line `cwd: <path>` (optional, `~` expanded) → working directory; default `$HOME`.
 - Body line `capture: true` (optional) → run in capture mode (see below).
@@ -70,9 +70,9 @@ Agent-control surface exposed and partially wired:
 
 Two execution modes:
 
-1. **Interactive (default)** — `daemon.sync_once` calls `triggers.process_all()` once per cycle. Each pending reminder is launched via `launch.launch(cwd, prompt, cmd="claude"|"codex")` which spawns a new Ghostty window via `open -na /Applications/Ghostty.app --args …` (override the bundle with `BBRIDGE_GHOSTTY_APP`; binaries via `BBRIDGE_CLAUDE_BIN` / `BBRIDGE_CODEX_BIN`). The reminder is marked completed and activity records `claude-launched` / `codex-launched`. Failed launches stay unchecked and get retried.
+1. **Interactive (default)** — `daemon.sync_once` calls `triggers.process_all()` once per cycle. Each pending reminder is launched via `launch.launch(cwd, prompt, cmd="claude"|"codex")` which spawns a new Ghostty window via `open -na /Applications/Ghostty.app --args …` (override the bundle with `RBRIDGE_GHOSTTY_APP`; binaries via `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`). The reminder is marked completed and activity records `claude-launched` / `codex-launched`. Failed launches stay unchecked and get retried.
 
-2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/bbridge-capture-<reminder>.out`. State lives in `~/.claude/beads-bridge-captures.json` (override `BBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `BBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
+2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/rbridge-capture-<reminder>.out`. State lives in `~/.claude/reminders-bridge-captures.json` (override `RBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `RBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
 
 Other client surface (still not wired):
 - `Client.agent_worker(action)` — POST /api/agent {action: start|stop|restart}.
@@ -94,7 +94,7 @@ Other client surface (still not wired):
 
 ### Capture rules (R→B)
 - Skip if title has `{prefix}: ` (already managed), if completed (don't capture+immediately close), or if reminder is already linked.
-- Capture lists: only `{BBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`Readme`) or activity log (`Activity`).
+- Capture lists: only `{RBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`Readme`) or activity log (`Activity`).
 - Failure mode: `bd create` exception → log warning, skip; reminder stays unprefixed and gets retried next cycle.
 - State persisted right after capture (before the EventKit batch) so a crash between create and rename does not double-create on retry.
 
@@ -130,16 +130,16 @@ When a project is hidden, `daemon.sync_once` actively deletes its `{prefix}{proj
 When `show_completed=False`, `reconcile_project` short-circuits closed beads at the top of the issue loop: it deletes any linked reminder, drops the link, and skips create logic. When `True`, closed beads are syncable, and creates pre-set the EventKit `completed` flag so the new reminder lands already checked.
 
 ### Activity log
-`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden). Backed by `~/.claude/beads-bridge-activity.jsonl` (override `BBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
+`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden). Backed by `~/.claude/reminders-bridge-activity.jsonl` (override `RBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
 
 ### Lint
-`bbridge lint` is read-only. Codes: `missing-meta`, `missing-desc`, `missing-notes`, `bad-status`, `drift`, orphan. The daemon does not fail-stop on lint issues; it rewrites on the next sync.
+`rbridge lint` is read-only. Codes: `missing-meta`, `missing-desc`, `missing-notes`, `bad-status`, `drift`, orphan. The daemon does not fail-stop on lint issues; it rewrites on the next sync.
 
 ## Constraints for agents editing this repo
 
 - Sync directions are fixed: B→R for fields, R→B for completion (`bd close`), uncomplete (`bd reopen`), and capture (`bd create`). Do not add more without explicit approval.
 - Do not parse `<bb:notes>` for structured data; it is free-form user text.
-- Do not touch reminders outside `{BBRIDGE_LIST_PREFIX}{project}` lists.
+- Do not touch reminders outside `{RBRIDGE_LIST_PREFIX}{project}` lists.
 - iOS Claude / external agents: write into `Beads: <project>` lists for capture, never into `Readme` or `Activity` (drift gets overwritten silently).
 - Do not add new `<bb:*>` tags without updating `body.py` parser, lint codes, and this doc together.
 - New bead status values: add to `VALID_STATUSES` in `body.py` and the README env-var section.

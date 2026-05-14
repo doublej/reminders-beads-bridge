@@ -1,4 +1,4 @@
-"""CLI for beads-bridge."""
+"""CLI for reminders-bridge."""
 
 import sys
 
@@ -14,7 +14,7 @@ from . import settings as settings_module
 from . import state as state_module
 
 
-USAGE = "Usage: bbridge [run|sync|doctor|status|lint|probe]"
+USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe]"
 
 
 def main() -> None:

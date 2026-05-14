@@ -13,11 +13,11 @@ _LIST_SUFFIX = "Activity"
 _LEGACY_SUFFIXES = ("__log__",)
 _TITLE = "Recent activity"
 _MAX_ENTRIES = 200
-_DEFAULT_PATH = Path("~/.claude/beads-bridge-activity.jsonl").expanduser()
+_DEFAULT_PATH = Path("~/.claude/reminders-bridge-activity.jsonl").expanduser()
 
 
 def _path() -> Path:
-    return Path(os.getenv("BBRIDGE_ACTIVITY", str(_DEFAULT_PATH))).expanduser()
+    return Path(os.getenv("RBRIDGE_ACTIVITY", str(_DEFAULT_PATH))).expanduser()
 
 
 def list_name(prefix: str) -> str:

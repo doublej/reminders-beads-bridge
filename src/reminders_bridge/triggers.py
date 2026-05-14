@@ -26,11 +26,11 @@ _CAPTURE_RE = re.compile(
 
 
 def claude_list_name() -> str:
-    return os.getenv("BBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+    return os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
 
 
 def codex_list_name() -> str:
-    return os.getenv("BBRIDGE_CODEX_LIST", "Codex: Sessions")
+    return os.getenv("RBRIDGE_CODEX_LIST", "Codex: Sessions")
 
 
 def parse_request(rem: reminders_module.Reminder) -> tuple[Path, str, bool]:
