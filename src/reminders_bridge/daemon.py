@@ -1,6 +1,7 @@
 """Poll loop that reconciles beads issues with Apple Reminders."""
 
 import logging
+import os
 import time
 
 from . import activity as activity_module
@@ -11,6 +12,7 @@ from . import body as body_module
 from . import captures as captures_module
 from . import sessions as sessions_module
 from . import config as config_module
+from . import fixer as fixer_module
 from . import link as link_module
 from . import projects_list as projects_list_module
 from . import readme as readme_module
@@ -324,12 +326,33 @@ def reconcile_project(
         state_module.save(cfg.state_path, state)
 
 
+_FAIL_THRESHOLD = int(os.getenv("RBRIDGE_FIXER_THRESHOLD", "5"))
+_fail_counts: dict[str, int] = {}
+_fail_messages: dict[str, str] = {}
+
+
 def _safe(name: str, fn, *args, **kwargs):
     try:
-        return fn(*args, **kwargs)
+        result = fn(*args, **kwargs)
     except Exception as e:
-        log.warning("%s failed: %s", name, e)
+        _fail_counts[name] = _fail_counts.get(name, 0) + 1
+        _fail_messages[name] = str(e)
+        log.warning(
+            "%s failed (%d/%d): %s", name, _fail_counts[name], _FAIL_THRESHOLD, e
+        )
+        if _fail_counts[name] >= _FAIL_THRESHOLD:
+            errors = [
+                f"{n} (x{c}): {_fail_messages[n]}"
+                for n, c in _fail_counts.items()
+            ]
+            list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+            if fixer_module.trigger_auto(errors, list_name):
+                _fail_counts.clear()
+                _fail_messages.clear()
         return None
+    _fail_counts.pop(name, None)
+    _fail_messages.pop(name, None)
+    return result
 
 
 def _run_activity(prefix: str) -> None:

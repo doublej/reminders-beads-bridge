@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import activity as activity_module
+from . import fixer as fixer_module
 from . import launch as launch_module
 from . import reminders as reminders_module
 
@@ -215,6 +216,8 @@ def poll() -> None:
         if not cwd.exists():
             cwd = Path.home()
         sid = h.get("session") or None
+        if not sid and fixer_module.is_fixer(rem.body):
+            prompt = fixer_module.wrap_prompt(prompt)
         try:
             _launch_turn(rem.id, list_name, prompt, cwd, sid)
         except OSError as e:
