@@ -76,6 +76,82 @@ Two execution modes:
 
 2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/rbridge-capture-<reminder>.out`. State lives in `~/.claude/reminders-bridge-captures.json` (override `RBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `RBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
 
+### Voice exchange mailboxes
+
+`mailbox.py` + `mirror.py` own a third standalone lane (peer to triggers /
+captures / sessions): one free-floating Reminders list per open agent ↔
+user voice exchange. Driven by the `/voice-chat-takeout` skill from any
+Claude Code session — no beads coupling, no project registry lookup.
+
+**Surface per exchange** (slug `[a-z0-9][a-z0-9-]{0,47}`):
+- `{RBRIDGE_LIST_PREFIX}{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list
+  (default `Beads: Voice: <slug>`). Two daemon-owned reminders:
+  - `How this list works` (header) — overwritten on drift. Body mirrors
+    `mailbox.HEADER_BODY_TEMPLATE`: brief path, the four optional response
+    prefixes (`decision:` / `note:` / `question:` / `done`), and the exact
+    `rbridge mailbox read --slug <s>` command.
+  - `Brief for <slug>` — the rendered voice brief. Also daemon-owned;
+    user edits get overwritten next sync (the brief is the agent's
+    outgoing message; user responses go in *new* reminders).
+- A silent breadcrumb reminder titled `Voice exchange open: <slug>` in
+  the user's default Reminders list (the one
+  `EKEventStore.defaultCalendarForNewReminders()` returns). Body carries
+  `<bb:mirror slug="…"/>` so the bridge can find and clean it up. High
+  priority, **no alarm, no due date** — discoverability is passive.
+- State file `~/.claude/voice-mailboxes/<slug>.json` (override dir with
+  `RBRIDGE_MAILBOX_DIR`) plus `<slug>.brief.md` next to it.
+
+**Daemon GC rules** (`mailbox.sync` runs once per cycle from
+`daemon.sync_once` alongside `sessions.poll()` / `captures.poll()`):
+1. For each state file, refresh header + brief on drift.
+2. If the Reminders list no longer exists (user deleted it), drop the
+   state file + mirror reminder; record `voice-closed (list-deleted)`.
+3. If any unchecked reminder has title `done` (case-insensitive), call
+   `mailbox.close()` — deletes list + mirror, drops state, records
+   `voice-closed (done-reminder)`.
+
+**Discoverability** is silent by design. Plan rationale: agents may open
+exchanges overnight or during meetings, so pushing notifications is wrong
+by default. Signals are limited to (a) the default-list mirror reminder,
+(b) high-priority flag on header / brief / mirror, (c) idempotent re-open
+refreshing the mirror's modification time so it bubbles up in sort order.
+No `EKAlarm`, no `osascript -e 'display notification'`, no due-dates. If
+the user wants louder signals for a specific exchange they can add an
+alarm in Reminders.app themselves — the daemon never overwrites alarms.
+
+**Defensive boundary**: `projects_list.apply_hides()` skips any list name
+matching `mailbox.is_voice_list_name()` so the project-hide path can never
+delete a voice list, even if a beads project happened to be named
+`Voice: <x>`.
+
+**Activity log events**: `voice-opened`, `voice-response` (currently only
+fires on `done` detection), `voice-closed` (with reason: `user` /
+`cli` / `done-reminder` / `list-deleted`).
+
+**New env vars** (full list also in README):
+- `RBRIDGE_VOICE_LIST_PREFIX` (default `Voice: `) — inner prefix for the
+  list name. Final = `{RBRIDGE_LIST_PREFIX}{this}{slug}`.
+- `RBRIDGE_MAILBOX_DIR` (default `~/.claude/voice-mailboxes`).
+- `RBRIDGE_MAILBOX_MIRROR` (default `true`) — set false to disable the
+  default-list breadcrumb.
+
+**CLI surface** (no beads dependency, works from any cwd):
+- `rbridge mailbox open --slug X --kind REMINDERS --brief -` — read brief
+  from stdin, idempotent re-open. Prints the four-line confirmation block
+  (list / brief / read / close).
+- `rbridge mailbox read --slug X` — JSON dump of user responses (header +
+  brief filtered out). Prints a stderr warning if a `done` reminder is
+  present.
+- `rbridge mailbox close --slug X` — tear down.
+- `rbridge mailbox refresh --slug X` — re-up reminders without changing
+  the brief on disk.
+- `rbridge mailbox list` — enumerate active mailboxes.
+
+`rbridge doctor` reports the count of active mailboxes after the API
+check. No daemon dependency for the CLI: `open`/`read`/`close`/`refresh`/
+`list` all work even when `rbridge run` is not running — the daemon only
+adds GC + drift correction on top.
+
 Other client surface (still not wired):
 - `Client.agent_worker(action)` — POST /api/agent {action: start|stop|restart}.
 - `Client.agents_start(project, ticket_id, **opts)` — POST /api/agents to launch a coding session against a ticket (opts: useWorktree, model).

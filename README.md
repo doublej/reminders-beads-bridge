@@ -31,7 +31,8 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `Beads: Projects` | One reminder per project. **Check to hide** that project — its `Beads: <project>` list is deleted within seconds. Uncheck to bring it back; the daemon recreates the list and reminders from beads. | Daemon writes the rows; you only toggle the checkbox. |
 | `Beads: Settings` | One reminder per global toggle. **Check = enabled, uncheck = disabled.** Currently: `Show completed tasks` (off → closed beads pruned from project lists; on → surfaced as completed reminders). | Daemon writes the rows; you only toggle the checkbox. |
 | `Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. | Daemon (overwrites drift). |
-| `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status). | Daemon (overwrites drift). |
+| `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
+| `Beads: Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is dictated by the user (or by Siri on their behalf). See "Voice exchange mailboxes". | Agent + user (responses). |
 
 Hiding a project via `Beads: Projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
 
@@ -72,6 +73,9 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
+| `RBRIDGE_VOICE_LIST_PREFIX` | `Voice: ` | Inner prefix for voice exchange list names (final = `{RBRIDGE_LIST_PREFIX}{this}{slug}`). |
+| `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
+| `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
 
 ## Commands
 
@@ -79,7 +83,12 @@ uv run rbridge run       # persistent poll loop
 - `rbridge sync` — One-shot reconcile, print visible project count.
 - `rbridge status` — Print registry + projects/settings list state + link counts per project (with `[hidden]` / `[visible]` flag).
 - `rbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
-- `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API.
+- `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API. Also prints active voice mailbox count.
+- `rbridge mailbox open --slug <s> --kind REMINDERS --brief -` — open a voice exchange mailbox. Brief read from stdin, or pass `--brief <path>`.
+- `rbridge mailbox read --slug <s>` — drain user responses as JSON.
+- `rbridge mailbox close --slug <s>` — tear down the mailbox.
+- `rbridge mailbox refresh --slug <s>` — re-up header + brief + mirror reminders.
+- `rbridge mailbox list` — enumerate active mailboxes.
 ## Sessions: launching Claude / Codex from Reminders
 
 Two reminders lists drive standalone agent sessions, fully decoupled from the beads sync. Toggling `Beads: Projects`, hiding projects, or having no `.beads/` directories has no effect here.
@@ -163,6 +172,42 @@ The Codex: Sessions list isn't picking up new reminders. Investigate.
 ```
 
 Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Readme list sync`, …) fails `RBRIDGE_FIXER_THRESHOLD` times in a row (default 5), the daemon writes its own fixer reminder titled `rbridge auto-fixer` into `Claude: Sessions` with the error trail in the body. Cooldown: `RBRIDGE_FIXER_COOLDOWN_S` (default 3600) prevents loops.
+
+## Voice exchange mailboxes
+
+A third lane (alongside Beads sync and Sessions): a free-floating Reminders
+list per active voice exchange. The intended flow is:
+
+1. The agent invokes the `/voice-chat-takeout --mailbox=<slug>` skill from a
+   Claude Code session. The skill composes a TTS-friendly brief, saves it
+   under `~/.claude/voice-mailboxes/<slug>.brief.md`, and pipes it into
+   `rbridge mailbox open`.
+2. The bridge creates `Beads: Voice: <slug>` with two daemon-owned reminders:
+   a header (how the list works, prefix conventions, the read command) and
+   the brief itself. Both are flagged high priority.
+3. A silent breadcrumb reminder `Voice exchange open: <slug>` is dropped
+   into the user's default Reminders list — high-priority but **no alarm,
+   no notification**. The user discovers it on their next glance.
+4. The user takes a voice walk with ChatGPT / Claude voice. The voice
+   partner is briefed to dictate responses as Siri reminders into
+   `Beads: Voice: <slug>`, optionally prefixed `decision:`, `note:`,
+   `question:`, or `done`.
+5. When the user returns, the agent runs `rbridge mailbox read --slug <slug>`
+   to drain the responses as JSON, then `rbridge mailbox close` (or the
+   user adds a `done` reminder and the daemon auto-closes next cycle).
+
+The mailbox is not tied to beads. The skill works from any directory; no
+`.beads/` directory or registry entry is required.
+
+Slug grammar: `[a-z0-9][a-z0-9-]{0,47}` (kebab-case label). Slug collision
+on `open` is non-destructive — header + brief are rewritten, prior user
+responses are preserved.
+
+Discoverability is **silent by design**. No alarms, no notifications, no
+"Today" due dates. Agents may open exchanges overnight or during meetings
+without surfacing alerts. The signals are: the mirror reminder in the
+default list, the high-priority flag, and `rbridge mailbox list` for the
+agent itself. Disable the mirror with `RBRIDGE_MAILBOX_MIRROR=false`.
 
 ## Launch at login
 
