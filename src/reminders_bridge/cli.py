@@ -1,5 +1,7 @@
 """CLI for reminders-bridge."""
 
+import argparse
+import json
 import sys
 
 from . import api as api_module
@@ -7,6 +9,7 @@ from . import beads as beads_module
 from . import body as body_module
 from . import config as config_module
 from . import daemon as daemon_module
+from . import mailbox as mailbox_module
 from . import projects_list as projects_list_module
 from . import projects as projects_module
 from . import reminders as reminders_module
@@ -14,7 +17,7 @@ from . import settings as settings_module
 from . import state as state_module
 
 
-USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe]"
+USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe|mailbox]"
 
 
 def main() -> None:
@@ -32,6 +35,8 @@ def main() -> None:
     elif cmd == "probe":
         from . import probe as probe_module
         probe_module.run()
+    elif cmd == "mailbox":
+        mailbox_cli(sys.argv[2:])
     else:
         print(USAGE)
         sys.exit(1)
@@ -156,3 +161,116 @@ def doctor() -> None:
         print(f"  ok — cwd={cwd.get('cwd')!r} agent_healthy={healthy}")
     except api_module.APIError as e:
         print(f"  unreachable ({e.code}) — plumbing-only, not required for sync")
+
+    boxes = mailbox_module.list_active()
+    print(f"\nVoice mailboxes: {len(boxes)} active")
+    for mb in boxes:
+        print(f"  {mb.slug:<30}  list={mb.list_name!r}  kind={mb.kind}")
+
+
+def _read_brief(arg: str) -> str:
+    if arg == "-":
+        return sys.stdin.read()
+    return open(arg).read()
+
+
+def mailbox_cli(args: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="rbridge mailbox")
+    sub = parser.add_subparsers(dest="action", required=True)
+    p_open = sub.add_parser("open", help="open or refresh a voice mailbox")
+    p_open.add_argument("--slug", required=True)
+    p_open.add_argument(
+        "--kind", default="REMINDERS", choices=["REMINDERS", "CLAUDE_VOICE"]
+    )
+    p_open.add_argument(
+        "--brief", default="-",
+        help="path to brief markdown, or '-' for stdin (default)",
+    )
+    p_open.add_argument("--cwd", default="")
+    p_read = sub.add_parser("read", help="drain user responses as JSON")
+    p_read.add_argument("--slug", required=True)
+    p_close = sub.add_parser("close", help="tear down a voice mailbox")
+    p_close.add_argument("--slug", required=True)
+    p_refresh = sub.add_parser("refresh", help="re-up mailbox + mirror reminders")
+    p_refresh.add_argument("--slug", required=True)
+    sub.add_parser("list", help="enumerate active mailboxes")
+    ns = parser.parse_args(args)
+
+    if ns.action == "open":
+        _mailbox_open(ns)
+    elif ns.action == "read":
+        _mailbox_read(ns)
+    elif ns.action == "close":
+        _mailbox_close(ns)
+    elif ns.action == "refresh":
+        _mailbox_refresh(ns)
+    elif ns.action == "list":
+        _mailbox_list()
+
+
+def _mailbox_open(ns) -> None:
+    brief_text = _read_brief(ns.brief)
+    if not brief_text.strip():
+        print("error: brief is empty", file=sys.stderr)
+        sys.exit(1)
+    try:
+        mb = mailbox_module.open_mailbox(
+            slug=ns.slug, kind=ns.kind, brief_text=brief_text,
+            source_cwd=ns.cwd or "",
+        )
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"error: Reminders unavailable — {e}", file=sys.stderr)
+        print(f"brief saved to: {mailbox_module._brief_path(ns.slug)}", file=sys.stderr)
+        sys.exit(2)
+    print(f"mailbox opened: {mb.slug}")
+    print(f"list:    {mb.list_name}")
+    print(f"brief:   {mb.brief_path}")
+    print(f"read:    rbridge mailbox read --slug {mb.slug}")
+    print(f"close:   rbridge mailbox close --slug {mb.slug}")
+
+
+def _mailbox_read(ns) -> None:
+    try:
+        out = mailbox_module.read(ns.slug)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+    if out["has_done"]:
+        print(
+            "note: a `done` reminder is present — daemon will close on next "
+            "cycle. Consume responses now.",
+            file=sys.stderr,
+        )
+    json.dump(out, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
+def _mailbox_close(ns) -> None:
+    if mailbox_module.close(ns.slug, reason="cli"):
+        print(f"mailbox closed: {ns.slug}")
+    else:
+        print(f"no mailbox for slug {ns.slug!r}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _mailbox_refresh(ns) -> None:
+    if mailbox_module.refresh(ns.slug):
+        print(f"refreshed: {ns.slug}")
+    else:
+        print(f"no mailbox for slug {ns.slug!r}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _mailbox_list() -> None:
+    boxes = mailbox_module.list_active()
+    if not boxes:
+        print("(no active mailboxes)")
+        return
+    for mb in boxes:
+        print(
+            f"{mb.slug:<30}  kind={mb.kind:<14}  "
+            f"created={mb.created_at}  list={mb.list_name!r}"
+        )

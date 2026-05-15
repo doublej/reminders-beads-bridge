@@ -14,6 +14,7 @@ from . import sessions as sessions_module
 from . import config as config_module
 from . import fixer as fixer_module
 from . import link as link_module
+from . import mailbox as mailbox_module
 from . import projects_list as projects_list_module
 from . import readme as readme_module
 from . import projects as projects_module
@@ -389,6 +390,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
         _safe("Capture poll", captures_module.poll)
         _safe("Sessions poll", sessions_module.poll)
         _safe("Trigger lists sync", _run_triggers)
+        _safe("Mailbox sync", mailbox_module.sync)
         _safe("Apply hides", projects_list_module.apply_hides, active, hidden, state, cfg.state_path)
         show_completed = settings.get("show_completed", False)
         for project in visible:

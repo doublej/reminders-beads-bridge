@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from . import activity as activity_module
+from . import mailbox as mailbox_module
 from . import projects as projects_module
 from . import reminders as reminders_module
 from . import state as state_module
@@ -72,6 +73,12 @@ def apply_hides(
     dirty = False
     for project in active:
         if project.name not in hidden:
+            continue
+        if mailbox_module.is_voice_list_name(project.list_name):
+            log.warning(
+                "refusing to delete voice list %r via project-hide path",
+                project.list_name,
+            )
             continue
         try:
             if reminders_module.delete_list(project.list_name):
