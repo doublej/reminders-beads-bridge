@@ -53,7 +53,7 @@ sequenceDiagram
     D->>D: detect no 'bd-id:' prefix
     D->>BD: bd create
     BD-->>D: bd-42
-    D->>REM: rename to "bd-42: filters reset…"<br/>+ body restructure
+    D->>REM: rename to "bd-42: filters reset…"<br/>+ structure body
   end
 
   rect rgb(245, 166, 35, 0.08)
@@ -67,11 +67,46 @@ sequenceDiagram
 
   rect rgb(108, 209, 139, 0.08)
     Note over U,REM: Notes edit (R-only)
-    U->>REM: edit text inside &lt;bb:notes&gt;
+    U->>REM: edit text inside bb:notes block
     REM-->>W: EKEventStoreChanged
     W->>D: wake
     D->>REM: list reminders
-    D->>D: body.compose preserves &lt;bb:notes&gt;<br/>no bead-side update
+    D->>D: body.compose preserves bb:notes<br/>no bead-side update
+  end
+`;
+
+  const iosComm = `
+sequenceDiagram
+  autonumber
+  actor U as user
+  participant CIOS as Claude iOS
+  participant IOSAPP as Reminders (iOS)
+  participant ICLOUD as iCloud (CloudKit)
+  participant MAC as Reminders (Mac · EventKit)
+  participant W as watcher.py
+  participant D as rbridge daemon
+
+  rect rgb(34, 102, 204, 0.06)
+    Note over U,IOSAPP: edit on phone (user OR Claude iOS)
+    U->>IOSAPP: tap reminder · check · type
+    Note over CIOS,IOSAPP: alternative path:
+    CIOS->>IOSAPP: reminder_update_v0(id, ...)
+    IOSAPP->>ICLOUD: queue change
+    Note over IOSAPP,ICLOUD: seconds → minutes,<br/>depending on network
+    ICLOUD-->>MAC: deliver change<br/>(no notification fires)
+    Note over MAC,W: silent. EKEventStoreChanged<br/>only fires for local edits.
+    W->>D: next interval tick (≤ 5s)
+    D->>MAC: list reminders<br/>(detects new state)
+  end
+
+  rect rgb(108, 209, 139, 0.06)
+    Note over MAC,D: edit on Mac (daemon writes)
+    D->>MAC: apply_batch (creates / updates / deletes)
+    MAC-->>W: EKEventStoreChanged (in-process)
+    MAC->>ICLOUD: queue change
+    ICLOUD-->>IOSAPP: deliver to phone
+    IOSAPP-->>U: visible on next glance
+    IOSAPP-->>CIOS: visible on next reminder_search_v0
   end
 `;
 
@@ -110,6 +145,28 @@ flowchart LR
 the per-project reconcile (visibility, <code>show_completed</code>). The
 standalone lanes run before reconcile so a long beads pass can't starve
 session triggers or voice mailbox drift.</p>
+
+<h2>iCloud · iOS · Mac — who sees what when</h2>
+
+<p>
+  The daemon only touches the macOS EventKit store. Edits made on the
+  iPhone (by the user, or by <strong>Claude iOS</strong> via
+  <code>reminder_*_v0</code> tools) reach the Mac through iCloud
+  reminder sync. There is <strong>no notification</strong> when iCloud
+  delivers a change — it lands silently in the calendar store and
+  waits for the next interval poll.
+</p>
+
+<Mermaid
+  code={iosComm}
+  caption="iCloud delivers reminders silently to both ends. EKEventStoreChanged only fires for local macOS edits, so iOS-originated changes are picked up by the 5s interval poll."
+/>
+
+<p>
+  This is why the launchd plist overrides the default poll to 5s: it
+  bounds visible latency for iOS-originated changes at one interval,
+  since the in-process notification can't reach across iCloud.
+</p>
 
 <h2>Reminder → bead signals (the only writes back)</h2>
 

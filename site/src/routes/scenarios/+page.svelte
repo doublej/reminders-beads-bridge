@@ -81,14 +81,14 @@ sequenceDiagram
   D->>D: detect chat-mode reminder<br/>no session id yet
   D->>CL: claude -p --output-format json (with prompt)
   CL-->>D: events array<br/>(result: "bd-12, bd-18, bd-22…")
-  D->>REM: append claude (ts): block<br/>+ session: &lt;uuid&gt; header
+  D->>REM: append claude (ts): block<br/>+ session: [uuid] header
   Note over REM: reminder still unchecked
 
   REM->>IOS: sync back
   U->>IOS: read reply, append:<br/>you:<br/>group by author too
   IOS->>REM: sync
   D->>REM: detect new 'you:' after last 'claude (…):' block
-  D->>CL: claude -p --resume &lt;uuid&gt;
+  D->>CL: claude -p --resume [uuid]
   CL-->>D: next reply
   D->>REM: append claude (ts): block
   U->>IOS: read · check reminder → close

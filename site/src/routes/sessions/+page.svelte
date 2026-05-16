@@ -42,7 +42,7 @@ sequenceDiagram
   Note over L: reminder stays unchecked
   D->>L: scan for pending turns
   D->>D: detect new 'you:' after last 'claude (…):'
-  D->>CL: spawn with --resume &lt;session&gt;
+  D->>CL: spawn with --resume [session]
   CL->>FS: append to session JSONL
   CL-->>D: stdout (json events array)
   D->>D: find 'result' event
