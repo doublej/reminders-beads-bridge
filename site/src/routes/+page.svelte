@@ -44,6 +44,16 @@ flowchart LR
 </script>
 
 <section class="hero">
+  <figure class="hero-figure">
+    <img
+      src="{base}/hero.png"
+      alt="Reminders.app rendered as an industrial control panel — lists shown as LCD-style displays, daemon switches and gauges around the edges, with HOST UNDER FULL CONTROL displayed in the central readout."
+      width="1500"
+      height="934"
+      loading="eager"
+      fetchpriority="high"
+    />
+  </figure>
   <span class="badge">macOS daemon · v0.1</span>
   <h1>rbridge</h1>
   <p class="tagline">Apple Reminders as a control surface.</p>
@@ -200,8 +210,21 @@ flowchart LR
 
 <style>
   .hero {
-    padding: 60px 0 30px;
+    padding: 30px 0 30px;
     text-align: center;
+  }
+  .hero-figure {
+    margin: 0 0 32px;
+    /* spill to the full container width on wider screens */
+    margin-left: calc(-1 * var(--container-padding));
+    margin-right: calc(-1 * var(--container-padding));
+  }
+  .hero-figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.15);
   }
   .hero h1 { font-size: 4.5rem; }
   .tagline {
