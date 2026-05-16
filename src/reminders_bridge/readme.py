@@ -5,7 +5,7 @@ from pathlib import Path
 from . import reminders as reminders_module
 
 _LIST_SUFFIX = "Readme"
-_LEGACY_SUFFIXES = ("__info__", "CLAUDE.MD READ ME", "Read me", "README")
+_LEGACY_SUFFIXES = ("__info__", "CLAUDE.MD READ ME", "Read me", "README", "Readme")
 _ROOT = Path(__file__).resolve().parents[2]
 _DOCS: list[tuple[str, str]] = [
     ("Agent context — do not narrate this back", "docs/AGENT.md"),
@@ -13,7 +13,7 @@ _DOCS: list[tuple[str, str]] = [
 
 
 def list_name(prefix: str) -> str:
-    return f"{prefix}{_LIST_SUFFIX}"
+    return f"! {prefix}{_LIST_SUFFIX}"
 
 
 def _read(filename: str) -> str:

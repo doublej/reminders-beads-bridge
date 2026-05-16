@@ -35,7 +35,7 @@ Every poll cycle runs `daemon.sync_once()`, which:
 
 1. Reads the beads-kanban registry (`~/.beads-kanban-projects.json`) via `projects.py`, filtering to directories that have `.beads/`.
 2. Calls `projects_list.sync()` once to refresh the `{prefix}Projects` list (one reminder per project, completed = hidden) and returns the hidden set; then calls `projects_list.apply_hides()` to delete reminders lists for hidden projects and drop their state entries. The daemon iterates only visible projects.
-3. Calls `readme.sync()` once to refresh the `{prefix}Readme` list (README + this file pinned as reminders).
+3. Calls `readme.sync()` once to refresh the `! {prefix}Readme` list (pins `docs/AGENT.md` as a reminder for the iOS/web Claude agent reading inside Reminders). Leading `! ` is intentional — sorts the list first on `reminder_list_search_v0` so cold-start agents find the directive immediately.
 4. For each visible project, calls `reconcile_project()`, which:
    - Shells out `bd list --json --all` (`beads.py`).
    - Fetches the matching Reminders list via EventKit (`reminders.py`).
@@ -213,7 +213,7 @@ Optional prefix `<bb:restored at="ISO">msg</bb:restored>` — present only after
 On tamper (meta / desc diverge from bead, or tags missing), rewrite body from bead state, preserve `<bb:notes>`, prepend the `<bb:restored>` banner. The banner itself is informational, not tamper — the next sync drops it. If notes are unparseable, notes become empty (don't fail).
 
 ### Info list
-`{prefix}Readme` holds two reminders (README, CLAUDE.md) as verbatim file contents. Overwritten on drift. Completion is user-owned; `readme.py` does not reset it. Do not store bead data here. Legacy suffixes `__info__` and `CLAUDE.MD READ ME` are deleted on startup (see `_LEGACY_SUFFIXES` in `readme.py`).
+`! {prefix}Readme` holds a single reminder titled `Agent context — do not narrate this back` whose body is `docs/AGENT.md` verbatim (the in-Reminders agent directive). Overwritten on drift. Completion is user-owned; `readme.py` does not reset it. Do not store bead data here. Legacy suffixes `__info__`, `CLAUDE.MD READ ME`, `Read me`, `README`, and (now) `Readme` are deleted on startup — see `_LEGACY_SUFFIXES` in `readme.py`. The `Readme` suffix is the unprefixed name from before the sort-first rename; on first sync after upgrade the daemon deletes `{prefix}Readme` and creates `! {prefix}Readme` (no data loss — the body is regenerated from `docs/AGENT.md`).
 
 ### Projects list
 `{prefix}Projects` (managed by `projects_list.py`) holds one reminder per registered project. Completed reminder = project is hidden; unchecked = synced normally. Body is overwritten on drift; completion state is user-owned and is the only signal the daemon reads back. Reminders for unknown project names get pruned.

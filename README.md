@@ -30,7 +30,7 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `Beads: <project>` | One per registered project, one reminder per bead. Title is `{bead-id}: {title}`. | Daemon ↔ user (notes + completion + capture). |
 | `Beads: Projects` | One reminder per project. **Check to hide** that project — its `Beads: <project>` list is deleted within seconds. Uncheck to bring it back; the daemon recreates the list and reminders from beads. | Daemon writes the rows; you only toggle the checkbox. |
 | `Beads: Settings` | One reminder per global toggle. **Check = enabled, uncheck = disabled.** Currently: `Show completed tasks` (off → closed beads pruned from project lists; on → surfaced as completed reminders). | Daemon writes the rows; you only toggle the checkbox. |
-| `Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. | Daemon (overwrites drift). |
+| `! Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `! ` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. | Daemon (overwrites drift). |
 | `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
 | `Beads: Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". | Agent + user (responses). |
 
