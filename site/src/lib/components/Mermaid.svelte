@@ -8,26 +8,49 @@
 
   onMount(async () => {
     const { default: mermaid } = await import('mermaid');
-    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     mermaid.initialize({
       startOnLoad: false,
-      theme: dark ? 'dark' : 'neutral',
+      theme: 'base',
       themeVariables: {
-        fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-        fontSize: '14px',
-        primaryColor: dark ? '#1c2027' : '#ffffff',
-        primaryTextColor: dark ? '#e6e8eb' : '#1a1d21',
-        primaryBorderColor: dark ? '#2a2f38' : '#d9dde3',
-        lineColor: dark ? '#98a0aa' : '#5b626c'
+        fontFamily: "'DM Mono', ui-monospace, Menlo, monospace",
+        fontSize: '13px',
+        background: '#ffffff',
+        primaryColor: '#ffffff',
+        primaryTextColor: '#1a1a1a',
+        primaryBorderColor: '#d0d0d0',
+        secondaryColor: '#f5f5f5',
+        tertiaryColor: '#fafafa',
+        lineColor: '#606060',
+        textColor: '#404040',
+        mainBkg: '#ffffff',
+        secondBkg: '#f5f5f5',
+        clusterBkg: '#fafafa',
+        clusterBorder: '#e0e0e0',
+        edgeLabelBackground: '#ffffff',
+        nodeBorder: '#d0d0d0',
+        defaultLinkColor: '#606060',
+        actorBkg: '#ffffff',
+        actorBorder: '#d0d0d0',
+        actorTextColor: '#1a1a1a',
+        actorLineColor: '#606060',
+        signalColor: '#404040',
+        signalTextColor: '#1a1a1a',
+        labelBoxBkgColor: '#fafafa',
+        labelBoxBorderColor: '#d0d0d0',
+        labelTextColor: '#1a1a1a',
+        noteBkgColor: '#f5f5f5',
+        noteBorderColor: '#d0d0d0',
+        noteTextColor: '#404040',
+        sequenceNumberColor: '#1a1a1a'
       },
-      flowchart: { htmlLabels: true, curve: 'basis' },
-      sequence: { mirrorActors: false, showSequenceNumbers: false }
+      flowchart: { htmlLabels: true, curve: 'basis', padding: 12 },
+      sequence: { mirrorActors: false, showSequenceNumbers: false, useMaxWidth: true }
     });
     try {
       const { svg } = await mermaid.render(id, code);
       host.innerHTML = svg;
     } catch (e) {
-      host.innerHTML = `<pre style="color: var(--bad)">mermaid error\n${String(e)}</pre>`;
+      host.innerHTML = `<pre style="color:#b91c1c">mermaid error\n${String(e)}</pre>`;
     }
   });
 </script>
@@ -39,11 +62,11 @@
 
 <style>
   .mermaid-figure {
-    margin: 1.5em 0;
-    padding: 1.2rem;
-    background: var(--surface);
+    margin: 1.8em 0;
+    padding: 24px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     overflow-x: auto;
   }
   .mermaid-host :global(svg) {

@@ -4,9 +4,9 @@
 
   const installFlow = `
 flowchart TD
-  classDef step fill:#7aa8ff,stroke:#2563eb,color:#1a1d21
-  classDef verify fill:#6cd18b,stroke:#15803d,color:#1a1d21
-  classDef gate fill:#ffb55b,stroke:#b45309,color:#1a1d21
+  classDef step fill:#eef2fb,stroke:#5b7fbf,color:#1a1a1a
+  classDef verify fill:#eaf5ec,stroke:#5fa872,color:#1a1a1a
+  classDef gate fill:#fef0e0,stroke:#c47b2f,color:#1a1a1a
 
   A["1 · Prereqs<br/>uv · bd · git · Reminders.app"]:::step
   B["2 · Clone repo"]:::step

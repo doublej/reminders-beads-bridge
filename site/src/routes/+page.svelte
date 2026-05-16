@@ -5,10 +5,10 @@
 
   const overview = `
 flowchart LR
-  classDef human fill:#ffb98a,stroke:#c98c5b,color:#1a1d21
-  classDef agent fill:#7aa8ff,stroke:#2563eb,color:#1a1d21
-  classDef store fill:#f5a623,stroke:#b45309,color:#1a1d21
-  classDef daemon fill:#6cd18b,stroke:#15803d,color:#1a1d21
+  classDef human fill:#fef3e8,stroke:#c98c5b,color:#1a1a1a
+  classDef agent fill:#eef2fb,stroke:#5b7fbf,color:#1a1a1a
+  classDef store fill:#fdf3df,stroke:#c08832,color:#1a1a1a
+  classDef daemon fill:#eaf5ec,stroke:#5fa872,color:#1a1a1a
 
   USER(["👤 user"]):::human
   CC["Claude Code<br/>(project agent)"]:::agent

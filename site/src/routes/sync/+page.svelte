@@ -77,9 +77,9 @@ sequenceDiagram
 
   const tamper = `
 flowchart LR
-  classDef ok fill:#6cd18b,stroke:#15803d,color:#1a1d21
-  classDef bad fill:#ff7a85,stroke:#b91c1c,color:#1a1d21
-  classDef fix fill:#ffb55b,stroke:#b45309,color:#1a1d21
+  classDef ok fill:#eaf5ec,stroke:#5fa872,color:#1a1a1a
+  classDef bad fill:#fbeaec,stroke:#c54a5a,color:#1a1a1a
+  classDef fix fill:#fef0e0,stroke:#c47b2f,color:#1a1a1a
 
   A["expected = body.compose(issue, current_notes)"]:::ok
   B{"expected == actual?"}
