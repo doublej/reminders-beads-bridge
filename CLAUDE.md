@@ -103,7 +103,9 @@ Surface terms:
 - **exchange list** — `{voice prefix}<slug>` Reminders list (default `Voice: <slug>`).
 - **header / brief / mirror reminder** — daemon-owned reminders.
 - **response** + **response kind** (`decision` / `note` / `question` /
-  `done` / `free`) — user-added reminders in the exchange list.
+  `deferred` / `done` / `free`) — user-added reminders in the
+  exchange list. `deferred` is for explicit punts (talked about, no
+  decision yet, revisit later).
 - **writeback contract** — REMINDERS-brief block naming the list + prefixes.
 - **drain** — the project agent reads responses via `rbridge mailbox read`.
 - **takeout** — user-facing skill: `/voice-chat-takeout` (mailbox flow) or
@@ -115,9 +117,9 @@ Surface terms:
   the voice flow has no beads coupling, so the list deliberately drops
   the `Beads: ` namespace. Two daemon-owned reminders:
   - `How this list works` (header) — overwritten on drift. Body mirrors
-    `mailbox.HEADER_BODY_TEMPLATE`: brief path, the four optional response
-    prefixes (`decision:` / `note:` / `question:` / `done`), and the exact
-    `rbridge mailbox read --slug <s>` command.
+    `mailbox.HEADER_BODY_TEMPLATE`: brief path, the five optional response
+    prefixes (`decision:` / `note:` / `question:` / `deferred:` / `done`),
+    and the exact `rbridge mailbox read --slug <s>` command.
   - `Brief for <slug>` — the rendered voice brief. Also daemon-owned;
     user edits get overwritten next sync (the brief is the agent's
     outgoing message; user responses go in *new* reminders).

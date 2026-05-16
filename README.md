@@ -210,8 +210,8 @@ commits — keep the cross-surface vocabulary consistent.
 | **header reminder** | Daemon-owned `How this list works` reminder pinned in the exchange list. |
 | **brief reminder** | Daemon-owned `Brief for <slug>` reminder holding the brief text. |
 | **mirror reminder** | Silent breadcrumb `Voice exchange open: <slug>` in the user's default Reminders list. High-priority, no alarm, no notification. |
-| **response** | One non-daemon reminder in the exchange list. Optional title prefix: `decision:`, `note:`, `question:`, `done`. |
-| **response kind** | `decision` \| `note` \| `question` \| `done` \| `free`. Classified from title prefix by `mailbox._classify`. |
+| **response** | One non-daemon reminder in the exchange list. Optional title prefix: `decision:`, `note:`, `question:`, `deferred:`, `done`. |
+| **response kind** | `decision` \| `note` \| `question` \| `deferred` \| `done` \| `free`. Classified from title prefix by `mailbox._classify`. `deferred` is for things explicitly punted on the call — talked about, no decision yet, revisit later. |
 | **writeback contract** | Section of the REMINDERS-flavor brief that names the exchange list and the response prefixes. |
 | **drain** | The act of the agent reading user responses via `rbridge mailbox read --slug <slug>`. |
 | **open / close / refresh** | Lifecycle verbs. `rbridge mailbox open` creates, `close` tears down, `refresh` re-ups reminders without changing the brief. |

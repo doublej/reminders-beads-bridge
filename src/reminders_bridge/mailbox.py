@@ -58,6 +58,7 @@ When you reply, add new reminders to this list. Optional title prefixes:
   decision: <text>   you committed to something
   note: <text>       observation / context
   question: <text>   you expect the project agent to answer
+  deferred: <text>   talked about it, punted; revisit later
   done               close the exchange
 
 This reminder is daemon-owned; edits get overwritten."""
@@ -212,7 +213,7 @@ def _classify(title: str) -> tuple[str, str]:
     low = title.lower().strip()
     if low == "done":
         return "done", ""
-    for kind in ("decision", "note", "question"):
+    for kind in ("decision", "note", "question", "deferred"):
         if low.startswith(f"{kind}:"):
             return kind, title.split(":", 1)[1].strip()
     return "free", title
