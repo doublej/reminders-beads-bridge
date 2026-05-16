@@ -91,6 +91,14 @@ def _find_calendar(store: EKEventStore, name: str) -> EKCalendar | None:
     return None
 
 
+def list_calendar_names() -> list[str]:
+    store = get_store()
+    return [
+        str(cal.title())
+        for cal in store.calendarsForEntityType_(EKEntityTypeReminder)
+    ]
+
+
 def _pick_source(store: EKEventStore):
     for src in store.sources():
         if src.sourceType() == EKSourceTypeCalDAV:

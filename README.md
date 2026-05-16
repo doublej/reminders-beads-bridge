@@ -32,7 +32,7 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `Beads: Settings` | One reminder per global toggle. **Check = enabled, uncheck = disabled.** Currently: `Show completed tasks` (off → closed beads pruned from project lists; on → surfaced as completed reminders). | Daemon writes the rows; you only toggle the checkbox. |
 | `! Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `! ` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. | Daemon (overwrites drift). |
 | `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
-| `Beads: Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". | Agent + user (responses). |
+| `Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `Beads: ` prefix — the voice flow is independent of beads. | Agent + user (responses). |
 
 Hiding a project via `Beads: Projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
 
@@ -73,7 +73,7 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
-| `RBRIDGE_VOICE_LIST_PREFIX` | `Voice: ` | Inner prefix for voice exchange list names (final = `{RBRIDGE_LIST_PREFIX}{this}{slug}`). |
+| `RBRIDGE_VOICE_LIST_PREFIX` | `Voice: ` | Prefix for voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). |
 | `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
 | `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
 
@@ -180,19 +180,33 @@ list per active voice exchange.
 
 ### Vocabulary
 
+Three roles + their relationships:
+
+```
+       user (the human)
+        ├── talks to ──→ project agent  (the Claude Code session;
+        │                                composes the brief)
+        └── talks to ──→ voice agent    (the agent on the phone;
+                                         reads the brief)
+                              ↑
+                              │
+                project agent writes
+                the brief FOR ────────┘
+```
+
 Use these terms verbatim in skills, prompts, READMEs, agent docs, and
 commits — keep the cross-surface vocabulary consistent.
 
 | Term | Meaning |
 |------|---------|
-| **voice exchange** | One open conversation between the user and Claude Voice, identified by a slug. Backed by a Reminders list, a state file, and a brief on disk. |
+| **user** | The human. Third-person inside the brief — never addressed directly by either agent in writing; the voice agent will speak *with* the user out loud. |
+| **project agent** | The Claude Code session the user is working with. Composes the brief. Self-refers as "I" inside the brief; referred to in third person from outside the brief. |
+| **voice agent** | The agent on the phone — the reader of the brief, the one talking to the user out loud. Currently Claude Voice in practice, but the role label is generic; the brief should never assume a specific product. Addressed as "you" inside the brief. |
+| **voice exchange** | One open conversation between the user and the voice agent, identified by a slug. Backed by a Reminders list, a state file, and a brief on disk. |
 | **mailbox** | Implementation-level name for the state object (slug + list_name + brief_path + kind). User-facing docs prefer "voice exchange"; CLI subcommand is `rbridge mailbox …`. |
-| **slug** | `[a-z0-9][a-z0-9-]{0,47}` kebab-case label identifying the exchange. Topic-first, agent-picked. |
-| **brief** | The handoff document the previous agent composes for Claude Voice. Saved to disk; mirrored into the exchange list as a daemon-owned reminder. |
-| **the previous agent** | The Claude Code session that composed the brief. Self-reference inside the brief. |
-| **Claude Voice** | The voice agent that reads the brief and talks to the user. Always referred to by this name — never "voice partner", "voice agent", or "ChatGPT voice". |
-| **the user** | The human. Third-person inside the brief — never addressed directly. |
-| **exchange list** | The `{RBRIDGE_LIST_PREFIX}{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list (default `Beads: Voice: <slug>`). Holds the header reminder, brief reminder, and user responses. |
+| **slug** | `[a-z0-9][a-z0-9-]{0,47}` kebab-case label identifying the exchange. Topic-first, project-agent-picked. |
+| **brief** | The handoff document the project agent composes for the voice agent. Saved to disk; mirrored into the exchange list as a daemon-owned reminder. |
+| **exchange list** | The `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list (default `Voice: <slug>`). Holds the header reminder, brief reminder, and user responses. Independent of the `Beads: ` namespace — voice flow has no beads coupling. |
 | **header reminder** | Daemon-owned `How this list works` reminder pinned in the exchange list. |
 | **brief reminder** | Daemon-owned `Brief for <slug>` reminder holding the brief text. |
 | **mirror reminder** | Silent breadcrumb `Voice exchange open: <slug>` in the user's default Reminders list. High-priority, no alarm, no notification. |
@@ -215,14 +229,14 @@ The intended flow is:
    Claude Code session. The skill composes a TTS-friendly brief, saves it
    under `~/.claude/voice-mailboxes/<slug>.brief.md`, and pipes it into
    `rbridge mailbox open`.
-2. The bridge creates `Beads: Voice: <slug>` with two daemon-owned reminders:
+2. The bridge creates `Voice: <slug>` with two daemon-owned reminders:
    a header (how the list works, prefix conventions, the read command) and
    the brief itself. Both are flagged high priority.
 3. A silent breadcrumb reminder `Voice exchange open: <slug>` is dropped
    into the user's default Reminders list — high-priority but **no alarm,
    no notification**. The user discovers it on their next glance.
-4. The user takes a voice walk with Claude Voice. The brief tells Claude
-   Voice that decisions and follow-ups land back in `Beads: Voice: <slug>`
+4. The user takes a voice walk with the voice agent. The brief tells the
+   voice agent that decisions and follow-ups land back in `Voice: <slug>`
    as reminders, optionally prefixed `decision:`, `note:`, `question:`,
    or `done`.
 5. When the user returns, the agent runs `rbridge mailbox read --slug <slug>`

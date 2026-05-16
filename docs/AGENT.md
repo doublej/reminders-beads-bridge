@@ -47,10 +47,10 @@ Every list whose name starts with `Beads: ` (or `! Beads: `) is daemon-managed. 
 - `Beads: Projects` — one row per registered project. Check = hide (destructive for `<bb:notes>`; bead state safe). Daemon writes the rows; you toggle the checkbox.
 - `Beads: Settings` — global toggles. Check = enabled. Daemon writes the rows; you toggle.
 - `Beads: Activity` — rolling log of the last ~200 daemon events. **Daemon-owned, read-only**. Drift is overwritten next sync.
-- `Beads: Voice: <slug>` — voice exchange list (one per open exchange between the user and Claude Voice). Header reminder (`How this list works`) and brief reminder (`Brief for <slug>`) are daemon-owned. Responses are new reminders the user adds, optionally prefixed `decision:` / `note:` / `question:` / `done`. Drain via `rbridge mailbox read --slug <slug>` (CLI, not your tool surface). A `done` reminder closes the exchange on the next daemon cycle.
+- `Voice: <slug>` — voice exchange list (one per open exchange between the user and the voice agent on the phone). Independent of the `Beads: ` namespace — the voice flow has no beads coupling. Header reminder (`How this list works`) and brief reminder (`Brief for <slug>`) are daemon-owned. Responses are new reminders the user adds, optionally prefixed `decision:` / `note:` / `question:` / `done`. Drain via `rbridge mailbox read --slug <slug>` (CLI, not your tool surface). A `done` reminder closes the exchange on the next daemon cycle.
 - `Claude: Sessions` / `Codex: Sessions` — session triggers. Each unchecked reminder is one pending session request. Title = prompt; body headers select mode (interactive / `capture: true` / `chat: true` / `fixer: true`).
 
-**Mirror reminders**: a high-priority reminder titled `Voice exchange open: <slug>` may appear in the user's default Reminders list — whatever calendar `defaultCalendarForNewReminders()` returns (often `Reminders`, `Current Focus`, or similar). Its body carries `<bb:mirror slug="…"/>`. Treat it as read-only — it is the daemon's breadcrumb so the user notices an open voice exchange without being notified. Edit the underlying `Beads: Voice: <slug>` list, not the mirror.
+**Mirror reminders**: a high-priority reminder titled `Voice exchange open: <slug>` may appear in the user's default Reminders list — whatever calendar `defaultCalendarForNewReminders()` returns (often `Reminders`, `Current Focus`, or similar). Its body carries `<bb:mirror slug="…"/>`. Treat it as read-only — it is the daemon's breadcrumb so the user notices an open voice exchange without being notified. Edit the underlying `Voice: <slug>` list, not the mirror.
 
 ## XML markers in reminder bodies
 
@@ -83,7 +83,7 @@ The daemon polls every ~5s and writes to the same reminders you do. There are no
 
 ## Defensive defaults
 
-- Daemon-owned reminders (`! Beads: Readme`, `Beads: Activity`, header/brief reminders in `Beads: Voice: <slug>`, `Voice exchange open: <slug>` mirrors): **never create, complete, or delete**.
+- Daemon-owned reminders (`! Beads: Readme`, `Beads: Activity`, header/brief reminders in `Voice: <slug>`, `Voice exchange open: <slug>` mirrors): **never create, complete, or delete**.
 - XML-looking blocks (`<bb:…>`, `<agent_directive>`) in any reminder body: do not modify or remove unless the rules above explicitly allow it.
 - Before completing or deleting a reminder, check whether it belongs to a Voice exchange or a Session — those have lifecycle implications beyond "task done" (closing a brief reminder ends the exchange; closing a session reminder marks the session triggered, not cancelled).
 - When in doubt about ownership, treat as read-only and ask the user.

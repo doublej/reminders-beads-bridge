@@ -103,8 +103,10 @@ skill `~/.claude/skills/voice-chat-takeout/`, and the
   `/voice-deep-takeout` (deep paste-into-voice flow).
 
 **Surface per exchange** (slug `[a-z0-9][a-z0-9-]{0,47}`):
-- `{RBRIDGE_LIST_PREFIX}{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list
-  (default `Beads: Voice: <slug>`). Two daemon-owned reminders:
+- `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list
+  (default `Voice: <slug>`). **Independent of `RBRIDGE_LIST_PREFIX`** —
+  the voice flow has no beads coupling, so the list deliberately drops
+  the `Beads: ` namespace. Two daemon-owned reminders:
   - `How this list works` (header) — overwritten on drift. Body mirrors
     `mailbox.HEADER_BODY_TEMPLATE`: brief path, the four optional response
     prefixes (`decision:` / `note:` / `question:` / `done`), and the exact
@@ -148,11 +150,17 @@ fires on `done` detection), `voice-closed` (with reason: `user` /
 `cli` / `done-reminder` / `list-deleted`).
 
 **New env vars** (full list also in README):
-- `RBRIDGE_VOICE_LIST_PREFIX` (default `Voice: `) — inner prefix for the
-  list name. Final = `{RBRIDGE_LIST_PREFIX}{this}{slug}`.
+- `RBRIDGE_VOICE_LIST_PREFIX` (default `Voice: `) — prefix for the voice
+  list name. Final = `{this}{slug}`. Does not combine with
+  `RBRIDGE_LIST_PREFIX`.
 - `RBRIDGE_MAILBOX_DIR` (default `~/.claude/voice-mailboxes`).
 - `RBRIDGE_MAILBOX_MIRROR` (default `true`) — set false to disable the
   default-list breadcrumb.
+
+**Legacy GC**: `mailbox._gc_legacy_lists()` runs once per `mailbox.sync()`
+cycle and deletes any list whose name still starts with `Beads: Voice: `
+(the pre-rename prefix). Cheap (one `list_calendar_names()` call) and
+idempotent — only fires while orphan legacy lists exist.
 
 **CLI surface** (no beads dependency, works from any cwd):
 - `rbridge mailbox open --slug X --kind REMINDERS --brief -` — read brief

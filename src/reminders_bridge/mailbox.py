@@ -20,9 +20,10 @@ _STATE_DIR = Path(
     os.getenv("RBRIDGE_MAILBOX_DIR", "~/.claude/voice-mailboxes")
 ).expanduser()
 
-
-def _list_prefix() -> str:
-    return os.getenv("RBRIDGE_LIST_PREFIX", "Beads: ")
+# Pre-rename voice-list prefix. Daemon deletes any matching list on
+# startup — see `_gc_legacy_lists`. Voice flow has nothing to do with
+# beads, so the `Beads: ` prefix was misleading.
+_LEGACY_VOICE_LIST_PREFIX = "Beads: Voice: "
 
 
 def _voice_prefix() -> str:
@@ -30,8 +31,8 @@ def _voice_prefix() -> str:
 
 
 def voice_list_prefix() -> str:
-    """Full prefix for voice exchange list names (e.g. ``Beads: Voice: ``)."""
-    return f"{_list_prefix()}{_voice_prefix()}"
+    """Full prefix for voice exchange list names (default ``Voice: ``)."""
+    return _voice_prefix()
 
 
 def is_voice_list_name(name: str) -> bool:
@@ -316,7 +317,30 @@ def _sync_one(mb: Mailbox) -> None:
             return
 
 
+def _gc_legacy_lists() -> None:
+    """Delete pre-rename `Beads: Voice: *` lists if any survive.
+
+    Voice exchanges used to live under `Beads: <voice-prefix><slug>` but
+    the flow is independent of beads — the prefix was misleading. Any
+    list still carrying the old prefix is orphan after the rename
+    (state files have been migrated to the new naming convention or
+    cleared). Drop them.
+    """
+    for name in reminders_module.list_calendar_names():
+        if not name.startswith(_LEGACY_VOICE_LIST_PREFIX):
+            continue
+        try:
+            if reminders_module.delete_list(name):
+                log.info("GC'd legacy voice list: %s", name)
+        except RuntimeError as e:
+            log.warning("legacy GC failed for %s: %s", name, e)
+
+
 def sync() -> None:
+    try:
+        _gc_legacy_lists()
+    except Exception as e:
+        log.warning("legacy voice-list GC failed: %s", e)
     for mb in list_active():
         try:
             _sync_one(mb)
