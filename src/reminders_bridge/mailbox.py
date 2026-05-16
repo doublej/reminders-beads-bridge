@@ -47,7 +47,7 @@ HEADER_BODY_TEMPLATE = """\
 Voice exchange mailbox — slug: {slug}
 Brief saved at: {brief_path}
 
-Drain your responses into the agent (run this in your terminal):
+Drain your responses into the project agent (run this in your terminal):
   rbridge mailbox read --slug {slug}
 
 Close the exchange:
@@ -57,7 +57,7 @@ Close the exchange:
 When you reply, add new reminders to this list. Optional title prefixes:
   decision: <text>   you committed to something
   note: <text>       observation / context
-  question: <text>   you expect the agent to answer
+  question: <text>   you expect the project agent to answer
   done               close the exchange
 
 This reminder is daemon-owned; edits get overwritten."""

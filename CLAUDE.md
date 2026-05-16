@@ -88,17 +88,24 @@ Claude Code session — no beads coupling, no project registry lookup.
 skill `~/.claude/skills/voice-chat-takeout/`, and the
 `/voice-deep-takeout` command):
 
+Three roles:
+- **user** — the human. Third-person inside the brief; never addressed
+  directly in writing (the voice agent speaks *with* the user out loud).
+- **project agent** — the Claude Code session the user works in.
+  Composes the brief. Self-refers as "I" inside the brief.
+- **voice agent** — the agent on the phone the user talks to. Reads
+  the brief. Addressed as "you" inside the brief. Currently Claude
+  Voice in practice; brief should never assume a specific product.
+
+Surface terms:
 - **voice exchange** / **mailbox** — the open conversation, identified by slug.
-- **brief** — handoff doc the previous agent composes for Claude Voice.
-- **Claude Voice** — the voice agent reading the brief. Never "voice partner".
-- **the user** — third-person inside the brief. Never addressed directly.
-- **the previous agent** — the Claude Code session that composed the brief.
-- **exchange list** — `{prefix}{voice prefix}<slug>` Reminders list.
+- **brief** — handoff doc the project agent composes for the voice agent.
+- **exchange list** — `{voice prefix}<slug>` Reminders list (default `Voice: <slug>`).
 - **header / brief / mirror reminder** — daemon-owned reminders.
 - **response** + **response kind** (`decision` / `note` / `question` /
   `done` / `free`) — user-added reminders in the exchange list.
 - **writeback contract** — REMINDERS-brief block naming the list + prefixes.
-- **drain** — agent reads responses via `rbridge mailbox read`.
+- **drain** — the project agent reads responses via `rbridge mailbox read`.
 - **takeout** — user-facing skill: `/voice-chat-takeout` (mailbox flow) or
   `/voice-deep-takeout` (deep paste-into-voice flow).
 
