@@ -72,6 +72,16 @@ class Mailbox:
     source_cwd: str = ""
 
 
+@dataclass
+class CloseResult:
+    found: bool
+    list_deleted: bool = False
+    list_was_missing: bool = False
+    list_error: str | None = None
+    mirror_error: str | None = None
+    state_deleted: bool = False
+
+
 def _state_path(slug: str) -> Path:
     return _STATE_DIR / f"{slug}.json"
 
@@ -242,21 +252,28 @@ def read(slug: str) -> dict:
     }
 
 
-def close(slug: str, reason: str = "user") -> bool:
+def close(slug: str, reason: str = "user") -> CloseResult:
     mb = _load(slug)
     if mb is None:
-        return False
+        return CloseResult(found=False)
+    result = CloseResult(found=True)
     try:
-        reminders_module.delete_list(mb.list_name)
+        if reminders_module.delete_list(mb.list_name):
+            result.list_deleted = True
+        else:
+            result.list_was_missing = True
     except RuntimeError as e:
+        result.list_error = str(e)
         log.warning("delete list failed for %s: %s", slug, e)
     try:
         mirror_module.delete(slug)
     except RuntimeError as e:
+        result.mirror_error = str(e)
         log.warning("mirror delete failed for %s: %s", slug, e)
     _delete_state(slug)
+    result.state_deleted = True
     activity_module.record(mb.list_name, "voice-closed", "", f"{slug} ({reason})")
-    return True
+    return result
 
 
 def refresh(slug: str) -> bool:

@@ -249,11 +249,23 @@ def _mailbox_read(ns) -> None:
 
 
 def _mailbox_close(ns) -> None:
-    if mailbox_module.close(ns.slug, reason="cli"):
-        print(f"mailbox closed: {ns.slug}")
-    else:
+    result = mailbox_module.close(ns.slug, reason="cli")
+    if not result.found:
         print(f"no mailbox for slug {ns.slug!r}", file=sys.stderr)
         sys.exit(1)
+    parts: list[str] = []
+    if result.list_deleted:
+        parts.append("list deleted")
+    elif result.list_was_missing:
+        parts.append("list was already missing")
+    elif result.list_error:
+        parts.append(f"list delete FAILED ({result.list_error})")
+    if result.mirror_error:
+        parts.append(f"mirror delete failed ({result.mirror_error})")
+    parts.append("state cleared")
+    print(f"mailbox closed: {ns.slug} — " + ", ".join(parts))
+    if result.list_error:
+        sys.exit(2)
 
 
 def _mailbox_refresh(ns) -> None:
