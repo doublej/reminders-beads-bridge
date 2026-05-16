@@ -50,7 +50,7 @@ sequenceDiagram
     REM-->>W: EKEventStoreChanged
     W->>D: wake
     D->>REM: list reminders
-    D->>D: detect no `bd-id:` prefix
+    D->>D: detect no 'bd-id:' prefix
     D->>BD: bd create
     BD-->>D: bd-42
     D->>REM: rename to "bd-42: filters reset…"<br/>+ body restructure

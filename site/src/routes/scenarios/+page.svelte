@@ -152,7 +152,7 @@ terminal — they file a chat-mode reminder, the daemon runs
 follow-up question is just another <code>you:</code> block in the same
 reminder.</p>
 
-<Mermaid code={scenario3} caption="Multi-turn chat. Session id persists in the reminder body, so close + reopen + new `you:` block resumes the same conversation." />
+<Mermaid code={scenario3} caption="Multi-turn chat. Session id persists in the reminder body, so close + reopen + new 'you:' block resumes the same conversation." />
 
 <h3>What's interesting</h3>
 <ul>

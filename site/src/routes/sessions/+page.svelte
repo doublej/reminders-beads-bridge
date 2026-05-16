@@ -38,16 +38,16 @@ sequenceDiagram
   participant CL as claude -p
   participant FS as ~/.claude/projects/
 
-  U->>L: append `you:` block
+  U->>L: append 'you:' block
   Note over L: reminder stays unchecked
   D->>L: scan for pending turns
-  D->>D: detect new `you:` after last `claude (…):`
+  D->>D: detect new 'you:' after last 'claude (…):'
   D->>CL: spawn with --resume &lt;session&gt;
   CL->>FS: append to session JSONL
   CL-->>D: stdout (json events array)
   D->>D: find 'result' event
-  D->>L: append `claude (ts):` block<br/>write `session:` header
-  Note over L: reminder still unchecked,<br/>ready for next `you:` turn
+  D->>L: append 'claude (ts):' block<br/>write 'session:' header
+  Note over L: reminder still unchecked,<br/>ready for next 'you:' turn
 `;
 </script>
 

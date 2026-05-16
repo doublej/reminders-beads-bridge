@@ -28,7 +28,7 @@ stateDiagram-v2
   brief_pinned --> walking : user starts voice walk
   walking --> draining : user adds responses<br/>(decision/note/question/deferred)
   draining --> walking : more turns
-  draining --> closing : user adds 'done' OR<br/>project agent runs `mailbox close`
+  draining --> closing : user adds 'done' OR<br/>project agent runs 'mailbox close'
   closing --> [*] : list deleted · state cleared · mirror removed
 
   walking --> closing : user deletes the list<br/>(daemon GC next cycle)
