@@ -225,10 +225,13 @@ Activity log events use the same vocabulary: `voice-opened`,
 
 The intended flow is:
 
-1. The agent invokes the `/voice-chat-takeout --mailbox=<slug>` skill from a
-   Claude Code session. The skill composes a TTS-friendly brief, saves it
-   under `~/.claude/voice-mailboxes/<slug>.brief.md`, and pipes it into
-   `rbridge mailbox open`.
+1. The project agent invokes the `/voice-chat-takeout --mailbox=<slug>`
+   skill from a Claude Code session. The skill first runs a
+   context-gathering pre-flight (Read referenced files, grep symbols,
+   inspect git, capture error strings) — the brief has to be grounded
+   in evidence, not paraphrased recall. It then composes a TTS-friendly
+   brief, saves it under `~/.claude/voice-mailboxes/<slug>.brief.md`,
+   and pipes it into `rbridge mailbox open`.
 2. The bridge creates `Voice: <slug>` with two daemon-owned reminders:
    a header (how the list works, prefix conventions, the read command) and
    the brief itself. Both are flagged high priority.
