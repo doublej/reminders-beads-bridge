@@ -38,6 +38,7 @@ Confirm before: hiding a project (deletes `<bb:notes>`), closing >1 ticket in on
 - `Beads: Settings` — toggles. Check = on.
 - `Beads: Activity` — rolling log (read-only).
 - `Beads: Readme` — this brief.
+- `Beads: Voice: <slug>` — voice exchange list. Header + brief reminders are daemon-owned. Responses (`decision:`/`note:`/`question:`/`done`) go in new reminders. Drain with `rbridge mailbox read --slug <slug>`.
 - `Claude: Sessions`, `Codex: Sessions` — session triggers.
 
 **Beads ops**

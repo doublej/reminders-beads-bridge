@@ -83,6 +83,25 @@ captures / sessions): one free-floating Reminders list per open agent ↔
 user voice exchange. Driven by the `/voice-chat-takeout` skill from any
 Claude Code session — no beads coupling, no project registry lookup.
 
+**Vocabulary** (canonical table in `README.md` → "Voice exchange mailboxes" →
+"Vocabulary"; keep usage consistent across this file, `docs/AGENT.md`, the
+skill `~/.claude/skills/voice-chat-takeout/`, and the
+`/voice-deep-takeout` command):
+
+- **voice exchange** / **mailbox** — the open conversation, identified by slug.
+- **brief** — handoff doc the previous agent composes for Claude Voice.
+- **Claude Voice** — the voice agent reading the brief. Never "voice partner".
+- **the user** — third-person inside the brief. Never addressed directly.
+- **the previous agent** — the Claude Code session that composed the brief.
+- **exchange list** — `{prefix}{voice prefix}<slug>` Reminders list.
+- **header / brief / mirror reminder** — daemon-owned reminders.
+- **response** + **response kind** (`decision` / `note` / `question` /
+  `done` / `free`) — user-added reminders in the exchange list.
+- **writeback contract** — REMINDERS-brief block naming the list + prefixes.
+- **drain** — agent reads responses via `rbridge mailbox read`.
+- **takeout** — user-facing skill: `/voice-chat-takeout` (mailbox flow) or
+  `/voice-deep-takeout` (deep paste-into-voice flow).
+
 **Surface per exchange** (slug `[a-z0-9][a-z0-9-]{0,47}`):
 - `{RBRIDGE_LIST_PREFIX}{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list
   (default `Beads: Voice: <slug>`). Two daemon-owned reminders:
