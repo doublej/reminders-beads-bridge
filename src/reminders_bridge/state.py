@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import atomicio as atomicio_module
+
 
 @dataclass
 class Link:
@@ -65,5 +67,4 @@ def save(path: Path, state: State) -> None:
             for project_path, p in state.projects.items()
         }
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2))
+    atomicio_module.atomic_write_text(path, json.dumps(data, indent=2))

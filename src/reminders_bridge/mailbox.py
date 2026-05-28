@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import activity as activity_module
+from . import atomicio as atomicio_module
 from . import mirror as mirror_module
 from . import navigation as navigation_module
 from . import reminders as reminders_module
@@ -122,8 +123,9 @@ def _load(slug: str) -> Mailbox | None:
 
 
 def _save(mb: Mailbox) -> None:
-    _STATE_DIR.mkdir(parents=True, exist_ok=True)
-    _state_path(mb.slug).write_text(json.dumps(asdict(mb), indent=2))
+    atomicio_module.atomic_write_text(
+        _state_path(mb.slug), json.dumps(asdict(mb), indent=2)
+    )
 
 
 def _delete_state(slug: str) -> None:
@@ -192,7 +194,7 @@ def open_mailbox(
     _validate(slug)
     _STATE_DIR.mkdir(parents=True, exist_ok=True)
     brief_p = _brief_path(slug)
-    brief_p.write_text(brief_text)
+    atomicio_module.atomic_write_text(brief_p, brief_text)
     existing = _load(slug)
     if existing is not None:
         mb = existing

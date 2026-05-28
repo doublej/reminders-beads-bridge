@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import activity as activity_module
+from . import atomicio as atomicio_module
 from . import launch as launch_module
 from . import reminders as reminders_module
 
@@ -51,9 +52,8 @@ def _load() -> list[Capture]:
 
 
 def _save(captures: list[Capture]) -> None:
-    _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _STATE_PATH.write_text(
-        json.dumps({"captures": [asdict(c) for c in captures]}, indent=2)
+    atomicio_module.atomic_write_text(
+        _STATE_PATH, json.dumps({"captures": [asdict(c) for c in captures]}, indent=2)
     )
 
 

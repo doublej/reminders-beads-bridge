@@ -7,6 +7,7 @@ from collections import deque
 from pathlib import Path
 from typing import Deque
 
+from . import atomicio as atomicio_module
 from . import reminders as reminders_module
 
 _LIST_SUFFIX = "Activity"
@@ -101,4 +102,6 @@ def prune(max_bytes: int = 2_000_000) -> None:
     if not p.exists() or p.stat().st_size <= max_bytes:
         return
     entries = _tail()
-    p.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    atomicio_module.atomic_write_text(
+        p, "\n".join(json.dumps(e) for e in entries) + "\n"
+    )
