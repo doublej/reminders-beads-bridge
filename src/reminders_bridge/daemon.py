@@ -38,7 +38,7 @@ def _capture_unprefixed(
     remote_by_bead: dict[str, list[reminders_module.Reminder]],
     issues: list[beads_module.Issue],
 ) -> bool:
-    linked_reminder_ids = {l.reminder_id for l in ps.links.values()}
+    linked_reminder_ids = {lk.reminder_id for lk in ps.links.values()}
     captured_any = False
     for rem in remote_list:
         if link_module._TITLE_PREFIX.match(rem.name):

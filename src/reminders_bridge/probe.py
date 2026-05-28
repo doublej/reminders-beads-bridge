@@ -9,7 +9,6 @@ from typing import Any
 
 from EventKit import (  # type: ignore[import-not-found]
     EKAlarm,
-    EKEntityTypeReminder,
     EKReminder,
 )
 from Foundation import NSDate, NSDateComponents, NSURL  # type: ignore[import-not-found]
