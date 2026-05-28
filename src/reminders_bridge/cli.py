@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 
 from . import api as api_module
@@ -10,6 +11,7 @@ from . import body as body_module
 from . import config as config_module
 from . import daemon as daemon_module
 from . import mailbox as mailbox_module
+from . import navigation as navigation_module
 from . import projects_list as projects_list_module
 from . import projects as projects_module
 from . import reminders as reminders_module
@@ -163,9 +165,11 @@ def doctor() -> None:
         print(f"  unreachable ({e.code}) — plumbing-only, not required for sync")
 
     boxes = mailbox_module.list_active()
-    print(f"\nVoice mailboxes: {len(boxes)} active")
+    nav = "ENABLED" if navigation_module.sandbox.nav_enabled() else "DISABLED (RBRIDGE_VOICE_NAV)"
+    print(f"\nVoice mailboxes: {len(boxes)} active — file-nav {nav}")
     for mb in boxes:
-        print(f"  {mb.slug:<30}  list={mb.list_name!r}  kind={mb.kind}")
+        on = "on" if navigation_module.is_active(mb) else "off"
+        print(f"  {mb.slug:<30}  kind={mb.kind}  nav={on}  root={mb.source_cwd or '—'}")
 
 
 def _read_brief(arg: str) -> str:
@@ -186,7 +190,11 @@ def mailbox_cli(args: list[str]) -> None:
         "--brief", default="-",
         help="path to brief markdown, or '-' for stdin (default)",
     )
-    p_open.add_argument("--cwd", default="")
+    p_open.add_argument(
+        "--cwd",
+        default=os.getcwd(),
+        help="repo root for file-navigation; defaults to the current directory",
+    )
     p_read = sub.add_parser("read", help="drain user responses as JSON")
     p_read.add_argument("--slug", required=True)
     p_close = sub.add_parser("close", help="tear down a voice mailbox")
