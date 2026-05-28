@@ -349,8 +349,10 @@ def _safe(name: str, fn, *args, **kwargs):
             ]
             list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
             if fixer_module.trigger_auto(errors, list_name):
-                _fail_counts.clear()
-                _fail_messages.clear()
+                escalated = [n for n, c in _fail_counts.items() if c >= _FAIL_THRESHOLD]
+                for n in escalated:
+                    _fail_counts.pop(n, None)
+                    _fail_messages.pop(n, None)
         return None
     _fail_counts.pop(name, None)
     _fail_messages.pop(name, None)
