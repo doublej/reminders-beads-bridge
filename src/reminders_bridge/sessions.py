@@ -22,6 +22,7 @@ from . import activity as activity_module
 from . import atomicio as atomicio_module
 from . import fixer as fixer_module
 from . import launch as launch_module
+from . import procutil as procutil_module
 from . import reminders as reminders_module
 
 log = logging.getLogger(__name__)
@@ -145,22 +146,6 @@ def _extract_result(raw: str) -> tuple[str, str]:
     return response, result_event.get("session_id") or ""
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        reaped, _ = os.waitpid(pid, os.WNOHANG)
-        if reaped == pid:
-            return False
-    except (ChildProcessError, OSError):
-        pass
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
 def _finalize(t: Turn) -> bool:
     p = Path(t.stdout_path)
     raw = p.read_text(errors="replace") if p.exists() else ""
@@ -193,11 +178,12 @@ def poll() -> None:
     keep: list[Turn] = []
     now = time.time()
     for t in in_flight:
-        alive = _pid_alive(t.pid)
-        if alive and (now - t.started_at) < _TIMEOUT_S:
+        state = procutil_module.child_state(t.pid)
+        timed_out = (now - t.started_at) >= _TIMEOUT_S
+        if state == "running" and not timed_out:
             keep.append(t)
             continue
-        if alive:
+        if state == "running" and timed_out:
             try:
                 os.killpg(os.getpgid(t.pid), 15)
             except (OSError, ProcessLookupError):

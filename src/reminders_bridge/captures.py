@@ -18,6 +18,7 @@ from pathlib import Path
 from . import activity as activity_module
 from . import atomicio as atomicio_module
 from . import launch as launch_module
+from . import procutil as procutil_module
 from . import reminders as reminders_module
 
 log = logging.getLogger(__name__)
@@ -106,24 +107,6 @@ def launch_capture(
     )
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        reaped, _ = os.waitpid(pid, os.WNOHANG)
-        if reaped == pid:
-            return False
-    except ChildProcessError:
-        pass
-    except OSError:
-        pass
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
 def _finalize(c: Capture) -> bool:
     try:
         output = Path(c.stdout_path).read_text(errors="replace")
@@ -174,12 +157,12 @@ def poll() -> None:
     changed = False
     now = time.time()
     for c in captures:
-        alive = _pid_alive(c.pid)
+        state = procutil_module.child_state(c.pid)
         timed_out = (now - c.started_at) >= _TIMEOUT_S
-        if alive and not timed_out:
+        if state == "running" and not timed_out:
             keep.append(c)
             continue
-        if timed_out and alive:
+        if state == "running" and timed_out:
             try:
                 os.killpg(os.getpgid(c.pid), 15)
             except (OSError, ProcessLookupError):
