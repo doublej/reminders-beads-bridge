@@ -26,7 +26,7 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def list_issues(cwd: Path, statuses: tuple[str, ...]) -> list[Issue]:
+def list_issues(cwd: Path) -> list[Issue]:
     result = _run(["list", "--json", "--all"], cwd)
     if result.returncode != 0:
         raise RuntimeError(f"bd list failed ({cwd}): {result.stderr.strip()}")
@@ -34,22 +34,17 @@ def list_issues(cwd: Path, statuses: tuple[str, ...]) -> list[Issue]:
         raw = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as e:
         raise RuntimeError(f"bd list returned invalid JSON ({cwd}): {e}") from e
-    issues: list[Issue] = []
-    for r in raw:
-        status = r.get("status", "")
-        if statuses and status not in statuses and status != "closed":
-            continue
-        issues.append(
-            Issue(
-                id=r["id"],
-                title=r.get("title", ""),
-                description=r.get("description", ""),
-                status=status,
-                priority=r.get("priority", 0),
-                issue_type=r.get("issue_type", "task"),
-            )
+    return [
+        Issue(
+            id=r["id"],
+            title=r.get("title", ""),
+            description=r.get("description", ""),
+            status=r.get("status", ""),
+            priority=r.get("priority", 0),
+            issue_type=r.get("issue_type", "task"),
         )
-    return issues
+        for r in raw
+    ]
 
 
 def close_issue(cwd: Path, issue_id: str, reason: str = "completed in Reminders") -> None:

@@ -266,7 +266,7 @@ def reconcile_project(
     show_completed: bool = False,
 ) -> None:
     try:
-        issues = beads_module.list_issues(project.path, cfg.statuses)
+        issues = beads_module.list_issues(project.path)
     except RuntimeError as e:
         log.warning("Skip %s: %s", project.name, e)
         return

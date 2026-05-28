@@ -93,7 +93,7 @@ def lint() -> None:
     total = 0
     for p in projects:
         try:
-            issues = {i.id: i for i in beads_module.list_issues(p.path, cfg.statuses)}
+            issues = {i.id: i for i in beads_module.list_issues(p.path)}
         except RuntimeError as e:
             print(f"  {p.name}: bd error — {e}")
             continue
