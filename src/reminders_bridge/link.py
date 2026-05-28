@@ -5,7 +5,7 @@ import re
 from . import beads as beads_module
 from . import reminders as reminders_module
 
-_BD_TO_REM_PRIO = {0: 0, 1: 1, 2: 5, 3: 9, 4: 9}
+_BD_TO_REM_PRIO = {0: 1, 1: 1, 2: 5, 3: 9, 4: 9}
 _TITLE_PREFIX = re.compile(r"^([a-zA-Z0-9_.-]+):\s")
 
 
