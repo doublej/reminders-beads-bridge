@@ -44,7 +44,7 @@ Every poll cycle runs `daemon.sync_once()`, which:
    - Diffs expected vs actual into a `Batch` (creates / updates / deletes) and commits via a single EventKit transaction.
    - Detects completed reminders → calls `bd close`.
    - Prunes reminders whose bead disappeared.
-4. Persists the state map (`~/.claude/reminders-bridge-state.json`) linking bead IDs to EventKit reminder IDs.
+5. Persists the state map (`~/.claude/reminders-bridge-state.json`) linking bead IDs to EventKit reminder IDs.
 
 Key invariants the architecture depends on:
 - Title format `{bead-id}: {title}` — `index_by_bead_id` parses this to adopt pre-existing reminders.
@@ -58,7 +58,7 @@ Key invariants the architecture depends on:
 
 Agent-control surface exposed and partially wired:
 
-- `!agent` marker in `<bb:notes>` → daemon scans on every cycle (`body.consume_agent_markers`) and dispatches via `_dispatch_agent_marker` in `daemon.py`. Worker is best-effort started (`agent_worker("start")`, errors swallowed) then session is enqueued via `agents_start`. Marker line is rewritten into `<bb:agent queued=… at=…/>` on success or `<bb:agent error=… at=…/>` on API failure. Activity log records `agent-queued` / `agent-error`.
+- `!agent` marker in `<bb:notes>` → daemon scans on every cycle (`body.consume_agent_markers`) and dispatches via `agent_marker.dispatch`, invoked from the `consume_agent_markers` callback inside `daemon._diff_existing`. Worker is best-effort started (`agent_worker("start")`, errors swallowed) then session is enqueued via `agents_start`. Marker line is rewritten into `<bb:agent queued=… at=…/>` on success or `<bb:agent error=… at=…/>` on API failure. Activity log records `agent-queued` / `agent-error`.
 
 ### Standalone session triggers (no beads coupling)
 
@@ -68,13 +68,13 @@ Agent-control surface exposed and partially wired:
 - Body line `capture: true` (optional) → run in capture mode (see below).
 - Remaining body lines → appended to the prompt.
 
-Two execution modes:
+Three execution modes:
 
 1. **Interactive (default)** — `daemon.sync_once` calls `triggers.process_all()` once per cycle. Each pending reminder is launched via `launch.launch(cwd, prompt, cmd="claude"|"codex")` which spawns a new Ghostty window via `open -na /Applications/Ghostty.app --args …` (override the bundle with `RBRIDGE_GHOSTTY_APP`; binaries via `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`). The reminder is marked completed and activity records `claude-launched` / `codex-launched`. Failed launches stay unchecked and get retried.
 
-3. **Chat (opt-in via `chat: true`)** — `sessions.py` owns this path. Each unchecked `Claude: Sessions` reminder with `chat: true` is a persistent conversation. Body holds `cwd: …`, `chat: true`, `session: <uuid>` headers and a transcript of `you:` / `claude (ts):` blocks. `sessions.poll()` (called from `daemon.sync_once` alongside `captures.poll()`) does two things per cycle: reap finished turns (waitpid-aware zombie detection, parse `--output-format json` event array, find the `result` event, append `claude (ts):` block, write `session:` header back); and scan for pending turns — any reminder whose latest text after the last `claude (…):` line is a non-empty `you:` block (or whole body sans headers, for the first turn) launches `claude -p --output-format json [--resume <sid>]`. Reminder stays unchecked across turns; checking it just makes the daemon skip it. Unchecking + appending a new `you:` block resumes the same session id, so close/reopen is transparent. State persists in `~/.claude/reminders-bridge-sessions.json`. `triggers._process_list` skips chat-mode reminders so they never hit Ghostty or capture paths.
-
 2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/rbridge-capture-<reminder>.out`. State lives in `~/.claude/reminders-bridge-captures.json` (override `RBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `RBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
+
+3. **Chat (opt-in via `chat: true`)** — `sessions.py` owns this path. Each unchecked `Claude: Sessions` reminder with `chat: true` is a persistent conversation. Body holds `cwd: …`, `chat: true`, `session: <uuid>` headers and a transcript of `you:` / `claude (ts):` blocks. `sessions.poll()` (called from `daemon.sync_once` alongside `captures.poll()`) does two things per cycle: reap finished turns (waitpid-aware zombie detection, parse `--output-format json` event array, find the `result` event, append `claude (ts):` block, write `session:` header back); and scan for pending turns — any reminder whose latest text after the last `claude (…):` line is a non-empty `you:` block (or whole body sans headers, for the first turn) launches `claude -p --output-format json [--resume <sid>]`. Reminder stays unchecked across turns; checking it just makes the daemon skip it. Unchecking + appending a new `you:` block resumes the same session id, so close/reopen is transparent. State persists in `~/.claude/reminders-bridge-sessions.json`. `triggers._process_list` skips chat-mode reminders so they never hit Ghostty or capture paths.
 
 ### Voice exchange mailboxes
 
@@ -156,7 +156,8 @@ delete a voice list, even if a beads project happened to be named
 
 **Activity log events**: `voice-opened`, `voice-response` (currently only
 fires on `done` detection), `voice-closed` (with reason: `user` /
-`cli` / `done-reminder` / `list-deleted`).
+`cli` / `done-reminder` / `list-deleted`), `voice-nav` / `voice-nav-blocked`
+(file-navigation request served / refused — `navigation.py`).
 
 **New env vars** (full list also in README):
 - `RBRIDGE_VOICE_LIST_PREFIX` (default `Voice: `) — prefix for the voice
@@ -200,6 +201,7 @@ Other client surface (still not wired):
 
 ### Source-of-truth (one-way, with three exceptions)
 - Bead fields (title / description / priority / status / type) → reminder. Never the reverse.
+- `RBRIDGE_STATUSES` is a **creation/surfacing gate, not a retention gate**. A bead is *created* as a reminder only while its status is listed (or it is closed and `show_completed` is on). Once a reminder exists, moving the bead to a non-listed status (e.g. `blocked`) keeps the reminder and syncs the new status into `<bb:meta>`; it is pruned only when the bead disappears from `bd list` entirely. A status change never discards `<bb:notes>`.
 - `<bb:notes>` is reminder-owned, preserved across syncs.
 - Reminder → bead signals (the only ones):
   - Completed reminder → `bd close`. Edge: only fires on a False→True transition (`fresh_completion = rem.completed and not link.reminder_completed`), so a closed bead doesn't get re-closed every poll.
@@ -207,7 +209,7 @@ Other client surface (still not wired):
   - **New reminder with no `bd-id:` prefix in a project list → `bd create`** (capture). Title becomes the bead title; reminder body becomes the bead description; priority defaults to p2. The reminder is then renamed to `{bead-id}: {title}` and its body restructured on the same cycle.
 
 ### Capture rules (R→B)
-- Skip if title has `{prefix}: ` (already managed), if completed (don't capture+immediately close), or if reminder is already linked.
+- Skip only if the leading `<token>:` of the title is an **existing bead id** (already managed), if completed (don't capture+immediately close), or if reminder is already linked. A non-id prefix like `Bug:` or `Note:` is *not* a skip — it gets captured as a new bead.
 - Capture lists: only `{RBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`Readme`) or activity log (`Activity`).
 - Failure mode: `bd create` exception → log warning, skip; reminder stays unprefixed and gets retried next cycle.
 - State persisted right after capture (before the EventKit batch) so a crash between create and rename does not double-create on retry.
@@ -244,7 +246,7 @@ When a project is hidden, `daemon.sync_once` actively deletes its `{prefix}{proj
 When `show_completed=False`, `reconcile_project` short-circuits closed beads at the top of the issue loop: it deletes any linked reminder, drops the link, and skips create logic. When `True`, closed beads are syncable, and creates pre-set the EventKit `completed` flag so the new reminder lands already checked.
 
 ### Activity log
-`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden). Backed by `~/.claude/reminders-bridge-activity.jsonl` (override `RBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
+`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden / `claude-turn` / `claude-error` from chat sessions). Backed by `~/.claude/reminders-bridge-activity.jsonl` (override `RBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
 
 ### Lint
 `rbridge lint` is read-only. Codes: `missing-meta`, `missing-desc`, `missing-notes`, `bad-status`, `drift`, orphan. The daemon does not fail-stop on lint issues; it rewrites on the next sync.

@@ -43,7 +43,7 @@ Confirm before: hiding a project (deletes `<bb:notes>`), closing >1 ticket in on
 Every list whose name starts with `Beads: ` (or `! Beads: `) is daemon-managed. Ownership and writability per list:
 
 - `! Beads: Readme` — **this directive**. daemon-owned, read-only. Do not create/complete/delete entries here.
-- `Beads: <project>` — tickets, one per reminder. Title `<bead-id>: <title>`. Body has `<bb:meta>` (daemon, read-only), `<bb:desc>` (daemon, read-only), `<bb:notes>` (yours). Check to close, uncheck to reopen. New reminder with no `<bead-id>:` prefix → daemon creates a bead within ~5s.
+- `Beads: <project>` — tickets, one per reminder. Title `<bead-id>: <title>`. Body has `<bb:meta>` (daemon, read-only), `<bb:desc>` (daemon, read-only), `<bb:notes>` (yours). Check to close, uncheck to reopen. New reminder with no `<bead-id>:` prefix → daemon creates a bead within ~5s. A ticket's reminder persists even when the bead moves to a non-active status (e.g. `blocked`) — `<bb:meta>` tracks the live status; the reminder is removed only when the bead is deleted from beads.
 - `Beads: Projects` — one row per registered project. Check = hide (destructive for `<bb:notes>`; bead state safe). Daemon writes the rows; you toggle the checkbox.
 - `Beads: Settings` — global toggles. Check = enabled. Daemon writes the rows; you toggle.
 - `Beads: Activity` — rolling log of the last ~200 daemon events. **Daemon-owned, read-only**. Drift is overwritten next sync.
