@@ -85,6 +85,11 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_VOICE_LIST_PREFIX` | `Voice: ` | Prefix for voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). |
 | `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
 | `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
+| `RBRIDGE_VOICE_NAV` | `true` | Master switch for voice-exchange file navigation (`fetch:` / `grep:` / `tree:`). Set `false` to stop serving files entirely. |
+| `RBRIDGE_NAV_MAX_BYTES` | `65536` | Max bytes returned per `fetch:` page; larger files paginate (`fetch: <path> page 2`). |
+| `RBRIDGE_NAV_GREP_HITS` | `50` | Max `grep:` matches before the result is capped. |
+| `RBRIDGE_NAV_TREE_ENTRIES` | `200` | Max entries in a `tree:` listing. |
+| `RBRIDGE_NAV_TREE_DEPTH` | `2` | Max recursion depth for `tree:`. |
 
 ## Commands
 
@@ -92,7 +97,7 @@ uv run rbridge run       # persistent poll loop
 - `rbridge sync` — One-shot reconcile, print visible project count.
 - `rbridge status` — Print registry + projects/settings list state + link counts per project (with `[hidden]` / `[visible]` flag).
 - `rbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
-- `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API. Also prints active voice mailbox count.
+- `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API. Also prints active voice mailbox count, the global file-nav switch, and each mailbox's nav state + root.
 - `rbridge mailbox open --slug <s> --kind REMINDERS --brief -` — open a voice exchange mailbox. Brief read from stdin, or pass `--brief <path>`.
 - `rbridge mailbox read --slug <s>` — drain user responses as JSON.
 - `rbridge mailbox close --slug <s>` — tear down the mailbox.
@@ -225,10 +230,12 @@ commits — keep the cross-surface vocabulary consistent.
 | **drain** | The act of the agent reading user responses via `rbridge mailbox read --slug <slug>`. |
 | **open / close / refresh** | Lifecycle verbs. `rbridge mailbox open` creates, `close` tears down, `refresh` re-ups reminders without changing the brief. |
 | **takeout** | The user-facing skill that composes a brief — `/voice-chat-takeout` (mailbox flow, default) or `/voice-deep-takeout` (deep paste-into-voice flow with structured return template, no mailbox). |
+| **file navigation** | The pull lane: the voice agent requests repo content via `fetch:` / `grep:` / `tree:` reminders and the daemon serves them in place. Sandboxed to the mailbox root; auto-enabled when the mailbox has a root. |
+| **request / served / blocked** | A nav request reminder (`fetch:` / `grep:` / `tree:`), its in-place result (`file:` / `results:` / `listing:`), or a refusal (`blocked:`). All excluded from `drain`. |
 
 Activity log events use the same vocabulary: `voice-opened`,
 `voice-response`, `voice-closed` (with reasons `user` / `cli` /
-`done-reminder` / `list-deleted`).
+`done-reminder` / `list-deleted`), `voice-nav`, `voice-nav-blocked`.
 
 ### Flow
 
@@ -267,6 +274,34 @@ Discoverability is **silent by design**. No alarms, no notifications, no
 without surfacing alerts. The signals are: the mirror reminder in the
 default list, the high-priority flag, and `rbridge mailbox list` for the
 agent itself. Disable the mirror with `RBRIDGE_MAILBOX_MIRROR=false`.
+
+### File navigation
+
+The brief is static, so for a reference walk across many files it can't
+carry everything. When a mailbox has a repo root (`rbridge mailbox open`
+defaults `--cwd` to the current directory), the voice agent can pull repo
+content into the exchange list on demand. It adds a request reminder; the
+daemon serves it on the next cycle (~5s) by rewriting that reminder **in
+place** and leaving it unchecked, so the result stays visible on the phone:
+
+| Request title | Action | Becomes |
+|---------------|--------|---------|
+| `fetch: <path>` | Read a file relative to the root; `fetch: <path> page N` for long files. | `file: <path>` |
+| `grep: <term>` | Literal, case-insensitive search of file contents under the root. | `results: <term>` |
+| `tree: [<subdir>]` | Depth-limited directory listing (omit subdir for the root). | `listing: <subdir>` |
+
+Refused requests become `blocked: <arg>` with the reason in the body. The
+nav lane is plumbing between the agent and the daemon, so these reminders
+are filtered out of `rbridge mailbox read`.
+
+**Sandbox.** Reads are confined to the repo root: absolute paths, `..` and
+symlink escapes, dotfiles, and secret-shaped files (`*.pem`, `*.key`,
+`id_rsa*`, `*.sqlite`, `.env`, `.git`, …) are refused; binaries and
+oversized files are rejected (caps via `RBRIDGE_NAV_*`). Navigation is
+**auto-enabled** whenever the mailbox has a usable root, and
+`RBRIDGE_VOICE_NAV=false` disables it globally. Served content lands in the
+iCloud-synced Reminders list, so only open mailboxes from project roots —
+never from `~` or a secrets directory.
 
 ## Launch at login
 
