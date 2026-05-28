@@ -146,14 +146,16 @@ def _extract_result(raw: str) -> tuple[str, str]:
     return response, result_event.get("session_id") or ""
 
 
-def _finalize(t: Turn) -> bool:
+def _finalize(t: Turn, by_id: dict[str, reminders_module.Reminder]) -> bool:
     p = Path(t.stdout_path)
     raw = p.read_text(errors="replace") if p.exists() else ""
     response, new_sid = _extract_result(raw)
-    rem = next(
-        (r for r in reminders_module.list_reminders(t.list_name) if r.id == t.reminder_id),
-        None,
-    )
+    rem = by_id.get(t.reminder_id)
+    if rem is None:
+        rem = next(
+            (r for r in reminders_module.list_reminders(t.list_name) if r.id == t.reminder_id),
+            None,
+        )
     if rem is None:
         p.unlink(missing_ok=True)
         return True
@@ -174,6 +176,8 @@ def _finalize(t: Turn) -> bool:
 
 def poll() -> None:
     list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+    reminders = reminders_module.list_reminders(list_name)
+    by_id = {r.id: r for r in reminders}
     in_flight = _load()
     keep: list[Turn] = []
     now = time.time()
@@ -188,13 +192,15 @@ def poll() -> None:
                 os.killpg(os.getpgid(t.pid), 15)
             except (OSError, ProcessLookupError):
                 pass
-        if not _finalize(t):
+        if not _finalize(t, by_id):
             keep.append(t)
     if len(keep) != len(in_flight):
         _save(keep)
-    active = {t.reminder_id for t in keep}
-    for rem in reminders_module.list_reminders(list_name):
-        if rem.completed or rem.id in active or not is_chat(rem.body):
+    # Skip every in-flight reminder: running turns must not double-launch, and
+    # just-finalized ones carry a stale (pre-finalize) body in this cached list.
+    busy = {t.reminder_id for t in in_flight}
+    for rem in reminders:
+        if rem.completed or rem.id in busy or not is_chat(rem.body):
             continue
         prompt = pending_user_text(rem.body, rem.name)
         if not prompt:
