@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import activity as activity_module
 from . import mirror as mirror_module
+from . import navigation as navigation_module
 from . import reminders as reminders_module
 
 log = logging.getLogger(__name__)
@@ -62,6 +63,17 @@ When you reply, add new reminders to this list. Optional title prefixes:
   done               close the exchange
 
 This reminder is daemon-owned; edits get overwritten."""
+
+
+NAV_HELP = """
+
+File navigation (this exchange is rooted at a repo):
+  fetch: <path>          read a file, relative to the repo root
+  fetch: <path> page 2   next chunk of a long file
+  grep: <term>           search file contents under the root
+  tree: <subdir>         list a directory (omit subdir for the root)
+The daemon answers in place: your `fetch:` becomes `file:` with the
+contents in the body, left unchecked. Refused requests become `blocked:`."""
 
 
 @dataclass
@@ -148,6 +160,8 @@ def _rewrite_reminders(mb: Mailbox, brief_text: str) -> None:
     header_body = HEADER_BODY_TEMPLATE.format(
         slug=mb.slug, brief_path=mb.brief_path
     )
+    if navigation_module.is_active(mb):
+        header_body += NAV_HELP
     brief_title = f"Brief for {mb.slug}"
     batch = reminders_module.Batch()
     header = next((r for r in remote if r.name == HEADER_TITLE), None)
@@ -209,6 +223,14 @@ def open_mailbox(
     return mb
 
 
+# Title prefixes owned by the file-navigation lane (requests + served + refused).
+# These are agent<->daemon plumbing, never user->project-agent responses, so
+# `read()` filters them out.
+_NAV_PREFIXES = (
+    "fetch:", "grep:", "tree:", "file:", "results:", "listing:", "blocked:",
+)
+
+
 def _classify(title: str) -> tuple[str, str]:
     low = title.lower().strip()
     if low == "done":
@@ -229,6 +251,8 @@ def read(slug: str) -> dict:
     brief_title = f"Brief for {mb.slug}"
     for r in rems:
         if r.name in (HEADER_TITLE, brief_title):
+            continue
+        if r.name.strip().lower().startswith(_NAV_PREFIXES):
             continue
         kind, text = _classify(r.name)
         if kind == "done":
@@ -307,15 +331,17 @@ def _sync_one(mb: Mailbox) -> None:
         brief_p.read_text() if brief_p.exists() else f"(brief missing: {mb.brief_path})"
     )
     _rewrite_reminders(mb, brief_text)
-    for r in reminders_module.list_reminders(mb.list_name):
-        if r.completed:
-            continue
-        if r.name.strip().lower() == "done":
+    rems = reminders_module.list_reminders(mb.list_name)
+    for r in rems:
+        if not r.completed and r.name.strip().lower() == "done":
             activity_module.record(
                 mb.list_name, "voice-response", "", f"{mb.slug}: done"
             )
             close(mb.slug, reason="done-reminder")
             return
+    batch = navigation_module.serve_requests(mb, rems)
+    if not batch.empty():
+        reminders_module.apply_batch(mb.list_name, batch)
 
 
 def _gc_legacy_lists() -> None:
