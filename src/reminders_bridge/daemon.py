@@ -39,9 +39,10 @@ def _capture_unprefixed(
     issues: list[beads_module.Issue],
 ) -> bool:
     linked_reminder_ids = {lk.reminder_id for lk in ps.links.values()}
+    valid_ids = {i.id for i in issues}
     captured_any = False
     for rem in remote_list:
-        if link_module._TITLE_PREFIX.match(rem.name):
+        if ":" in rem.name and rem.name.split(":", 1)[0].strip() in valid_ids:
             continue
         if rem.completed or rem.id in linked_reminder_ids:
             continue
