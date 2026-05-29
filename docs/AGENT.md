@@ -40,15 +40,16 @@ Confirm before: hiding a project (deletes `<bb:notes>`), closing >1 ticket in on
 
 ## System map
 
-Every list whose name starts with `Beads: ` (or `! Beads: `) is daemon-managed. Ownership and writability per list:
+Lists starting with `Beads: ` / `! Beads: ` are daemon-managed; the daemon also owns the bridge-global `rbridge: Settings`, `Claude: Tabs`, `Claude: Sessions` / `Codex: Sessions`, and `Voice: <slug>` lists (all below). Ownership and writability per list:
 
 - `! Beads: Readme` — **this directive**. daemon-owned, read-only. Do not create/complete/delete entries here.
 - `Beads: <project>` — tickets, one per reminder. Title `<bead-id>: <title>`. Body has `<bb:meta>` (daemon, read-only), `<bb:desc>` (daemon, read-only), `<bb:notes>` (yours). Check to close, uncheck to reopen. New reminder with no `<bead-id>:` prefix → daemon creates a bead within ~5s. A ticket's reminder persists even when the bead moves to a non-active status (e.g. `blocked`) — `<bb:meta>` tracks the live status; the reminder is removed only when the bead is deleted from beads.
 - `Beads: Projects` — one row per registered project. Check = hide (destructive for `<bb:notes>`; bead state safe). Daemon writes the rows; you toggle the checkbox.
-- `Beads: Settings` — global toggles. Check = enabled. Daemon writes the rows; you toggle.
+- `rbridge: Settings` — bridge-global controls (not in the `Beads: ` namespace). Toggles (check = enabled), an action (`Restart bridge` — complete it to restart the daemon; it un-completes itself), and a value (`Poll interval (ms)` — edit the `value:` line). Daemon writes the rows; you complete/edit them.
 - `Beads: Activity` — rolling log of the last ~200 daemon events. **Daemon-owned, read-only**. Drift is overwritten next sync.
 - `Voice: <slug>` — voice exchange list (one per open exchange between the user and the voice agent on the phone). Independent of the `Beads: ` namespace — the voice flow has no beads coupling. Header reminder (`How this list works`) and brief reminder (`Brief for <slug>`) are daemon-owned. Responses are new reminders the user adds, optionally prefixed `decision:` / `note:` / `question:` / `deferred:` / `done` (`deferred:` is for explicit punts — talked about, no decision yet). Drain via `rbridge mailbox read --slug <slug>` (CLI, not your tool surface). A `done` reminder closes the exchange on the next daemon cycle. **File navigation** (when the exchange is rooted at a repo — most are): add a reminder titled `fetch: <path>`, `grep: <term>`, or `tree: <dir>` to pull repo content into the list. The daemon rewrites the request in place within ~5s and leaves it unchecked: `fetch:`→`file:` with the contents in the body, `grep:`→`results:`, `tree:`→`listing:`; refused requests become `blocked:`. Use `fetch: <path> page 2` for the next chunk of a long file. Reads are sandboxed to the repo root (no dotfiles, secrets, or paths outside the root).
 - `Claude: Sessions` / `Codex: Sessions` — session triggers. Each unchecked reminder is one pending session request. Title = prompt; body headers select mode (interactive / `capture: true` / `chat: true` / `fixer: true`).
+- `Claude: Tabs` — one reminder per live Ghostty tab running Claude Code (not in the `Beads: ` namespace). Body mirrors the tab's transcript tail (read-only). Type a message under `send:` and **complete the reminder to type it into that live session** — completing here is a send action with a real side effect, not "done".
 
 **Mirror reminders**: a high-priority reminder titled `Voice exchange open: <slug>` may appear in the user's default Reminders list — whatever calendar `defaultCalendarForNewReminders()` returns (often `Reminders`, `Current Focus`, or similar). Its body carries `<bb:mirror slug="…"/>`. Treat it as read-only — it is the daemon's breadcrumb so the user notices an open voice exchange without being notified. Edit the underlying `Voice: <slug>` list, not the mirror.
 
@@ -85,7 +86,7 @@ The daemon polls every ~5s and writes to the same reminders you do. There are no
 
 - Daemon-owned reminders (`! Beads: Readme`, `Beads: Activity`, header/brief reminders in `Voice: <slug>`, `Voice exchange open: <slug>` mirrors): **never create, complete, or delete**.
 - XML-looking blocks (`<bb:…>`, `<agent_directive>`) in any reminder body: do not modify or remove unless the rules above explicitly allow it.
-- Before completing or deleting a reminder, check whether it belongs to a Voice exchange or a Session — those have lifecycle implications beyond "task done" (closing a brief reminder ends the exchange; closing a session reminder marks the session triggered, not cancelled).
+- Before completing or deleting a reminder, check whether it belongs to a Voice exchange, a Session, or `Claude: Tabs` — those have lifecycle implications beyond "task done" (closing a brief reminder ends the exchange; closing a session reminder marks the session triggered, not cancelled; completing a `Claude: Tabs` reminder types your `send:` text into a live Claude session).
 - When in doubt about ownership, treat as read-only and ask the user.
 
 ## Reference
