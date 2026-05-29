@@ -379,10 +379,12 @@ def _restart() -> None:
 
 
 def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
-    interval = settings.get("poll_interval")
-    if isinstance(interval, int) and interval > 0 and interval != cfg.poll_interval_s:
-        log.info("Poll interval set via Settings: %ds → %ds", cfg.poll_interval_s, interval)
-        cfg.poll_interval_s = interval
+    poll_ms = settings.get("poll_ms")
+    if isinstance(poll_ms, int) and poll_ms > 0:
+        new_s = poll_ms / 1000.0
+        if abs(new_s - cfg.poll_interval_s) > 1e-9:
+            log.info("Poll interval set via Settings: %.3fs → %.3fs", cfg.poll_interval_s, new_s)
+            cfg.poll_interval_s = new_s
     if settings.get("restart"):
         _restart()
 
@@ -429,7 +431,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
 def run() -> None:
     cfg = config_module.load()
     log.info(
-        "Starting reminders-bridge: poll=%ds (fallback) statuses=%s prefix=%r",
+        "Starting reminders-bridge: poll=%.3fs (fallback) statuses=%s prefix=%r",
         cfg.poll_interval_s,
         cfg.statuses,
         cfg.list_prefix,

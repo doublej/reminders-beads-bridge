@@ -54,16 +54,19 @@ SETTINGS: tuple[Setting, ...] = (
         ),
     ),
     Setting(
-        key="poll_interval",
-        title="Poll interval (seconds)",
+        key="poll_ms",
+        title="Poll interval (ms)",
         kind="value",
-        vdefault=5,
-        vmin=1,
-        vmax=600,
+        vdefault=5000,
+        vmin=100,
+        vmax=600000,
         body=(
             "How often the bridge polls when no Reminders change event has "
-            "fired (1–600). Edit the number on the value line below, then save. "
-            "Lower = more responsive, higher = lighter."
+            "fired, in milliseconds (100–600000). Edit the number on the value "
+            "line below, then save. Lower = faster, heavier. Note: the bridge "
+            "already syncs instantly on Reminders changes, so this mainly speeds "
+            "up picking up non-Reminders changes (beads, tabs); the effective "
+            "rate is bounded by how long a sync takes (~seconds)."
         ),
     ),
 )

@@ -11,7 +11,7 @@ from . import body as body_module
 class Config:
     registry_path: Path
     state_path: Path
-    poll_interval_s: int
+    poll_interval_s: float
     list_prefix: str
     statuses: tuple[str, ...]
     api_url: str
@@ -34,7 +34,7 @@ def load() -> Config:
         state_path=Path(
             os.getenv("RBRIDGE_STATE", "~/.claude/reminders-bridge-state.json")
         ).expanduser(),
-        poll_interval_s=int(os.getenv("RBRIDGE_POLL_S", "30")),
+        poll_interval_s=float(os.getenv("RBRIDGE_POLL_S", "30")),
         list_prefix=os.getenv("RBRIDGE_LIST_PREFIX", "Beads: "),
         statuses=statuses,
         api_url=os.getenv("RBRIDGE_API_URL", "http://localhost:5173"),
