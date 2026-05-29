@@ -38,7 +38,7 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 |------|---------|---------------|
 | `Beads: <project>` | One per registered project, one reminder per bead. Title is `{bead-id}: {title}`. | Daemon ↔ user (notes + completion + capture). |
 | `Beads: Projects` | One reminder per project. **Check to hide** that project — its `Beads: <project>` list is deleted within seconds. Uncheck to bring it back; the daemon recreates the list and reminders from beads. | Daemon writes the rows; you only toggle the checkbox. |
-| `rbridge: Settings` | Bridge-global controls (renamed from `Beads: Settings`; legacy list auto-deleted). Three kinds: **toggles** (`Show completed tasks` — off → closed beads pruned, on → surfaced as completed), an **action** (`Restart bridge` — complete it to re-exec the daemon; it un-completes itself), and a **value** (`Poll interval (seconds)` — edit the `value:` line, 1–600, applied live). | Daemon writes the rows; you complete/edit them. |
+| `rbridge: Settings` | Bridge-global controls (renamed from `Beads: Settings`; legacy list auto-deleted). Three kinds: **toggles** (`Show completed tasks` — off → closed beads pruned, on → surfaced as completed), an **action** (`Restart bridge` — complete it to re-exec the daemon; it un-completes itself), and a **value** (`Poll interval (ms)` — edit the `value:` line, 100–600000 ms, applied live). | Daemon writes the rows; you complete/edit them. |
 | `! Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `! ` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. | Daemon (overwrites drift). |
 | `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
 | `Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `Beads: ` prefix — the voice flow is independent of beads. | Agent + user (responses). |
@@ -68,7 +68,7 @@ uv run rbridge run       # persistent poll loop
 |---------|---------|-------------|
 | `RBRIDGE_REGISTRY` | `~/.beads-kanban-projects.json` | Project registry path |
 | `RBRIDGE_STATE` | `~/.claude/reminders-bridge-state.json` | Link map persistence |
-| `RBRIDGE_POLL_S` | `30` | Initial fallback poll interval (seconds). launchd plist sets `5`. The `Poll interval (seconds)` setting overrides this live at runtime. |
+| `RBRIDGE_POLL_S` | `30` | Initial fallback poll interval (seconds, float). launchd plist sets `5`. The `Poll interval (ms)` setting overrides this live at runtime (millisecond granularity). |
 | `RBRIDGE_LIST_PREFIX` | `Beads: ` | Reminders list prefix (per project) |
 | `RBRIDGE_SETTINGS_LIST` | `rbridge: Settings` | Name of the bridge-global settings/controls list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
