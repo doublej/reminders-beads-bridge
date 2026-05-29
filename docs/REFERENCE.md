@@ -81,10 +81,8 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_CAPTURE_TIMEOUT_S` | `1800` | Hard timeout per capture session. |
 | `RBRIDGE_SESSIONS_TIMEOUT_S` | `900` | Hard timeout per chat-mode turn. |
 | `RBRIDGE_TABS_LIST` | `Claude: Tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
-| `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, fork session id, messages). |
-| `RBRIDGE_TABS_TURNS_STATE` | `~/.claude/reminders-bridge-tab-turns.json` | In-flight send-turn tracking. |
+| `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, sent log, last error). |
 | `RBRIDGE_TABS_TAIL_MSGS` | `6` | Number of recent messages shown in the live transcript tail. |
-| `RBRIDGE_TABS_TIMEOUT_S` | `900` | Hard timeout per tab send-turn. |
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
@@ -200,19 +198,26 @@ Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Read
 
 **Discovery** (`ghostty.py`, modelled on the `claude-activity-watcher` tool): the daemon finds the Ghostty root process (`Ghostty.app/Contents/MacOS/ghostty`), then every interactive `claude` process (argv0 basename `claude`, a real tty, ancestor chain reaching Ghostty — this excludes the `claude daemon` and detached `versions/<x>` helpers). Each qualifying process is one tab. The tab's cwd comes from `lsof`; the session jsonl is the newest file under `~/.claude/projects/<encoded-cwd>/` (`transcript.py`).
 
+Title resolution + session id come from `~/.claude/sessions/<pid>.json` (authoritative per-pid record), falling back to the newest jsonl in the cwd's project dir. The **tab title** is the jsonl's `aiTitle` (the title Claude paints on the Ghostty tab) — this is the key matched against the tab bar when sending.
+
 **Reminder per tab** (keyed by pid, `priority 1`):
-- Title: `{project} · {tty}`.
+- Title: `{aiTitle or project} · {tty}`.
 - Body (daemon-owned, overwritten on drift):
-  - Header: `project`, `cwd`, `tty` / `pid` / `mode`, `session`.
+  - Header: `tab` (title), `project` + `status` (idle/busy/shell), `cwd`, `tty` / `pid` / `mode`, `session`.
   - `transcript (live · read-only)` — the last `RBRIDGE_TABS_TAIL_MSGS` (default 6) messages from the session jsonl, refreshed every cycle.
-  - `messages` — the you ↔ session reply log (see send, below).
+  - `sent` — log of messages typed into the tab.
   - `send:` — the only region read back from the user.
 
-**Read the transcript**: just open the reminder. The tail updates as the live session progresses (tabs sharing one cwd share the newest jsonl — an inherent limit).
+**Read the transcript**: just open the reminder. The tail updates as the live session progresses.
 
-**Send a message**: type under `send:`, then **check the reminder's circle to send**. Completion is the explicit send trigger (avoids firing on half-typed text). The daemon forks a headless `claude -p --output-format json --resume <sid>` from that tab's current session context, appends `you (ts): …` immediately, unchecks the reminder, and posts `claude (ts): …` when the turn finishes. The first send resumes the live session id; the reply's **forked** session id is reused for follow-ups, so the bridge never writes into the jsonl the live tab is actively appending to. It does **not** type into the live tab. Hard timeout: `RBRIDGE_TABS_TIMEOUT_S` (default 900s).
+**Send a message — types into the live tab, as you would.** Type under `send:`, then **check the reminder's circle**. macOS offers no silent way to inject terminal input (`TIOCSTI` is root-only; writing to the tty only paints the display), so the daemon drives the GUI: it activates Ghostty, finds the tab whose tab-bar title (status-glyph prefix stripped) matches this reminder's title, switches to it, re-verifies focus, then pastes the message and presses Return. On success it logs `you (ts): …` and clears `send:`; on failure it keeps your message under `send:` with a `⚠ couldn't type into tab` note so you can re-check to retry. Hard guards abort *before* any keystroke if the tab can't be matched or focus doesn't verify — it never types into the wrong session.
 
-**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `Claude: Sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-reply`, `tab-closed`.
+**Requirements / limits for send**:
+- **Accessibility permission** for the process running the daemon (System Settings → Privacy & Security → Accessibility). `rbridge doctor` reports whether it's granted.
+- The target tab must be on the **active Space** — windows on other Spaces are invisible to the accessibility API.
+- It steals focus to Ghostty for ~1s (that's what typing is). There's a sub-second race if you switch tabs at the exact moment it pastes.
+
+**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `Claude: Sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-send-failed`, `tab-closed`.
 
 `rbridge tabs` prints the discovered tabs (pid / tty / mode / session / project) without touching Reminders.
 
