@@ -20,8 +20,11 @@ Claude Code / Codex sessions, and voice exchanges with Claude Voice.
 - **Voice exchanges** — the project agent composes a brief; the user
   walks with the voice agent; structured responses come back as
   reminders the project agent drains via `rbridge mailbox read`.
+- **Claude tabs** — `Claude: Tabs` mirrors every live Ghostty tab running
+  Claude Code as one reminder: read a live transcript tail, or type under
+  `send:` and check the box to fork a headless reply back into the body.
 
-The three lanes are independent. You can use any without the others.
+The lanes are independent. You can use any without the others.
 
 ## Quick start
 

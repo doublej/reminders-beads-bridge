@@ -42,6 +42,7 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `! Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `! ` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. | Daemon (overwrites drift). |
 | `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
 | `Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `Beads: ` prefix — the voice flow is independent of beads. | Agent + user (responses). |
+| `Claude: Tabs` | One reminder per live Ghostty tab running Claude Code. Body = status header + live transcript tail + message log + a `send:` region. See "Claude tabs". Deliberately drops the `Beads: ` prefix — independent of beads. | Daemon writes the body; you type under `send:` and check to send. |
 
 Hiding a project via `Beads: Projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
 
@@ -79,6 +80,11 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_CLAUDE_FLAGS` | (empty) | Extra flags passed to `claude -p` in chat / capture / fixer modes. |
 | `RBRIDGE_CAPTURE_TIMEOUT_S` | `1800` | Hard timeout per capture session. |
 | `RBRIDGE_SESSIONS_TIMEOUT_S` | `900` | Hard timeout per chat-mode turn. |
+| `RBRIDGE_TABS_LIST` | `Claude: Tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
+| `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, fork session id, messages). |
+| `RBRIDGE_TABS_TURNS_STATE` | `~/.claude/reminders-bridge-tab-turns.json` | In-flight send-turn tracking. |
+| `RBRIDGE_TABS_TAIL_MSGS` | `6` | Number of recent messages shown in the live transcript tail. |
+| `RBRIDGE_TABS_TIMEOUT_S` | `900` | Hard timeout per tab send-turn. |
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
@@ -103,6 +109,7 @@ uv run rbridge run       # persistent poll loop
 - `rbridge mailbox close --slug <s>` — tear down the mailbox.
 - `rbridge mailbox refresh --slug <s>` — re-up header + brief + mirror reminders.
 - `rbridge mailbox list` — enumerate active mailboxes.
+- `rbridge tabs` — list live Ghostty tabs running Claude Code (pid / tty / mode / session / project). Read-only.
 ## Sessions: launching Claude / Codex from Reminders
 
 Two reminders lists drive standalone agent sessions, fully decoupled from the beads sync. Toggling `Beads: Projects`, hiding projects, or having no `.beads/` directories has no effect here.
@@ -186,6 +193,28 @@ The Codex: Sessions list isn't picking up new reminders. Investigate.
 ```
 
 Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Readme list sync`, …) fails `RBRIDGE_FIXER_THRESHOLD` times in a row (default 5), the daemon writes its own fixer reminder titled `rbridge auto-fixer` into `Claude: Sessions` with the error trail in the body. Cooldown: `RBRIDGE_FIXER_COOLDOWN_S` (default 3600) prevents loops.
+
+## Claude tabs
+
+`Claude: Tabs` is a standalone lane (peer to Sessions and Voice; no beads coupling) that mirrors every **live Ghostty tab running Claude Code** as one reminder. It's read-from-anywhere: a glanceable status board plus an inbox you can reply into from your phone. Driven by `tabs.sync()` once per cycle.
+
+**Discovery** (`ghostty.py`, modelled on the `claude-activity-watcher` tool): the daemon finds the Ghostty root process (`Ghostty.app/Contents/MacOS/ghostty`), then every interactive `claude` process (argv0 basename `claude`, a real tty, ancestor chain reaching Ghostty — this excludes the `claude daemon` and detached `versions/<x>` helpers). Each qualifying process is one tab. The tab's cwd comes from `lsof`; the session jsonl is the newest file under `~/.claude/projects/<encoded-cwd>/` (`transcript.py`).
+
+**Reminder per tab** (keyed by pid, `priority 1`):
+- Title: `{project} · {tty}`.
+- Body (daemon-owned, overwritten on drift):
+  - Header: `project`, `cwd`, `tty` / `pid` / `mode`, `session`.
+  - `transcript (live · read-only)` — the last `RBRIDGE_TABS_TAIL_MSGS` (default 6) messages from the session jsonl, refreshed every cycle.
+  - `messages` — the you ↔ session reply log (see send, below).
+  - `send:` — the only region read back from the user.
+
+**Read the transcript**: just open the reminder. The tail updates as the live session progresses (tabs sharing one cwd share the newest jsonl — an inherent limit).
+
+**Send a message**: type under `send:`, then **check the reminder's circle to send**. Completion is the explicit send trigger (avoids firing on half-typed text). The daemon forks a headless `claude -p --output-format json --resume <sid>` from that tab's current session context, appends `you (ts): …` immediately, unchecks the reminder, and posts `claude (ts): …` when the turn finishes. The first send resumes the live session id; the reply's **forked** session id is reused for follow-ups, so the bridge never writes into the jsonl the live tab is actively appending to. It does **not** type into the live tab. Hard timeout: `RBRIDGE_TABS_TIMEOUT_S` (default 900s).
+
+**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `Claude: Sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-reply`, `tab-closed`.
+
+`rbridge tabs` prints the discovered tabs (pid / tty / mode / session / project) without touching Reminders.
 
 ## Voice exchange mailboxes
 
