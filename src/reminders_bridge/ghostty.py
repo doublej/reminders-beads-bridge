@@ -12,6 +12,9 @@ from dataclasses import dataclass
 
 _GHOSTTY_MARK = "Ghostty.app/Contents/MacOS/ghostty"
 _ENV = {**os.environ, "LANG": "C"}
+# Absolute paths: under launchd PATH is minimal and lsof (/usr/sbin) isn't found.
+_PS = "/bin/ps"
+_LSOF = "/usr/sbin/lsof"
 
 
 @dataclass
@@ -34,7 +37,7 @@ class Tab:
 
 def _ps() -> list[Proc]:
     out = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,tty=,command="],
+        [_PS, "-axo", "pid=,ppid=,tty=,command="],
         capture_output=True, text=True, env=_ENV,
     ).stdout
     procs: list[Proc] = []
@@ -80,7 +83,7 @@ def _mode(args: str) -> str:
 
 def _resolve_cwd(pid: int) -> str:
     out = subprocess.run(
-        ["lsof", "-p", str(pid), "-a", "-d", "cwd", "-F", "n"],
+        [_LSOF, "-p", str(pid), "-a", "-d", "cwd", "-F", "n"],
         capture_output=True, text=True, env=_ENV,
     ).stdout
     for line in out.splitlines():
