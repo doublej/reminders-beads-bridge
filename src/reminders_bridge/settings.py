@@ -1,10 +1,16 @@
-"""Settings list: one reminder per toggle. Completed = enabled."""
+"""Settings list: one reminder per toggle. Completed = enabled.
 
+The list is bridge-global (restart, poll interval, display toggles), so it lives
+under the `rbridge:` namespace rather than the beads `{prefix}` — overridable via
+RBRIDGE_SETTINGS_LIST. The pre-rename `{prefix}Settings` list is deleted on sync.
+"""
+
+import os
 from dataclasses import dataclass
 
 from . import reminders as reminders_module
 
-_LIST_SUFFIX = "Settings"
+_LIST_NAME = os.getenv("RBRIDGE_SETTINGS_LIST", "rbridge: Settings")
 
 
 @dataclass(frozen=True)
@@ -28,8 +34,18 @@ SETTINGS: tuple[Setting, ...] = (
 )
 
 
-def list_name(prefix: str) -> str:
-    return f"{prefix}{_LIST_SUFFIX}"
+def list_name() -> str:
+    return _LIST_NAME
+
+
+def _delete_legacy(prefix: str) -> None:
+    for legacy in (f"{prefix}Settings", "Beads: Settings"):
+        if legacy == _LIST_NAME:
+            continue
+        try:
+            reminders_module.delete_list(legacy)
+        except RuntimeError:
+            pass
 
 
 def defaults() -> dict[str, bool]:
@@ -38,7 +54,8 @@ def defaults() -> dict[str, bool]:
 
 def sync(prefix: str) -> dict[str, bool]:
     """Reconcile settings list. Return {key: enabled} for every known setting."""
-    ln = list_name(prefix)
+    ln = list_name()
+    _delete_legacy(prefix)
     reminders_module.create_list(ln)
     remote = reminders_module.list_reminders(ln)
     by_name: dict[str, list[reminders_module.Reminder]] = {}

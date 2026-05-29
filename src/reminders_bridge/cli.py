@@ -85,7 +85,7 @@ def status() -> None:
         settings_values = settings_module.defaults()
     print(f"Registry: {cfg.registry_path}")
     print(f"Master list: {projects_list_module.list_name(cfg.list_prefix)!r}")
-    print(f"Settings list: {settings_module.list_name(cfg.list_prefix)!r}")
+    print(f"Settings list: {settings_module.list_name()!r}")
     for key, val in settings_values.items():
         print(f"  {key} = {val}")
     print(
