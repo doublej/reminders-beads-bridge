@@ -21,6 +21,7 @@ from . import projects as projects_module
 from . import reminders as reminders_module
 from . import settings as settings_module
 from . import state as state_module
+from . import tabs as tabs_module
 from . import triggers as triggers_module
 from . import watcher as watcher_module
 
@@ -392,6 +393,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
         _safe("Activity list sync", _run_activity, cfg.list_prefix)
         _safe("Capture poll", captures_module.poll)
         _safe("Sessions poll", sessions_module.poll)
+        _safe("Tabs sync", tabs_module.sync)
         _safe("Trigger lists sync", _run_triggers)
         _safe("Mailbox sync", mailbox_module.sync)
         _safe("Apply hides", projects_list_module.apply_hides, active, hidden, state, cfg.state_path)
