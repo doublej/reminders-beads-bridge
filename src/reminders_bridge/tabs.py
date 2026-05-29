@@ -1,10 +1,12 @@
 """`Claude: Tabs` lane — one reminder per live Ghostty tab running Claude Code.
 
-Read side: each reminder body mirrors the tab's status and a live tail of its
-session transcript. Send side: type a message under `send:` and complete the
-reminder; the daemon forks a headless turn (`tabsend.py`) from the session and
-posts the reply back. Reminders are keyed by pid and GC'd when the tab exits —
-this lane reflects live tabs, it is not a persistent chat store.
+Read side: each reminder body mirrors the tab's title, status, and a live tail
+of its session transcript. Send side: type a message under `send:` and complete
+the reminder; the daemon switches Ghostty to that tab and types the message in
+(`inject.py`) — as you would. On failure the message is kept for retry.
+
+Reminders are keyed by pid and GC'd when the tab exits — this lane reflects live
+tabs, it is not a persistent chat store.
 """
 
 import json
@@ -16,9 +18,9 @@ from pathlib import Path
 from . import activity as activity_module
 from . import atomicio as atomicio_module
 from . import ghostty as ghostty_module
+from . import inject as inject_module
 from . import reminders as reminders_module
 from . import tabsbody as tabsbody_module
-from . import tabsend as tabsend_module
 from . import transcript as transcript_module
 
 log = logging.getLogger(__name__)
@@ -26,7 +28,6 @@ log = logging.getLogger(__name__)
 _STATE_PATH = Path(
     os.getenv("RBRIDGE_TABS_STATE", str(Path.home() / ".claude/reminders-bridge-tabs.json"))
 )
-_TAIL_MSGS = int(os.getenv("RBRIDGE_TABS_TAIL_MSGS", "6"))
 
 
 def list_name() -> str:
@@ -51,40 +52,34 @@ def _now() -> str:
 
 
 def _entry(tabs: dict, key: str) -> dict:
-    return tabs.setdefault(key, {"reminder_id": "", "fork_sid": "", "turns": []})
+    return tabs.setdefault(key, {"reminder_id": "", "turns": [], "last_error": ""})
 
 
-def _dispatch(tab: ghostty_module.Tab, ent: dict, payload: str, sid: str) -> None:
-    cwd = Path(tab.cwd) if tab.cwd and Path(tab.cwd).is_dir() else Path.home()
-    resume = ent.get("fork_sid") or sid or None
-    tabsend_module.launch(str(tab.pid), ent["reminder_id"], payload, cwd, resume)
+def _try_send(ent: dict, session, payload: str) -> None:
+    """Type the payload into the tab. Success clears the carry; failure keeps it."""
+    title = session.title if session else ""
+    try:
+        inject_module.type_into_tab(title, payload)
+    except inject_module.InjectError as e:
+        ent["last_error"] = str(e)
+        activity_module.record(list_name(), "tab-send-failed", "", str(e))
+        return
     ent["turns"].append({"role": "you", "ts": _now(), "text": payload})
-    activity_module.record(list_name(), "tab-send", "", f"pid={tab.pid} chars={len(payload)}")
+    ent["last_error"] = ""
+    activity_module.record(list_name(), "tab-send", "", f"chars={len(payload)}")
 
 
-def _apply_replies(tabs: dict) -> None:
-    for res in tabsend_module.collect():
-        ent = next((e for e in tabs.values() if e.get("reminder_id") == res.reminder_id), None)
-        if ent is None:
-            continue
-        ent["turns"].append({"role": "claude", "ts": _now(), "text": res.response})
-        if res.session_id:
-            ent["fork_sid"] = res.session_id
-        activity_module.record(list_name(), "tab-reply", "", f"chars={len(res.response)}")
-
-
-def _sync_tab(tab: ghostty_module.Tab, state: dict, by_id: dict, busy: set[str], batch, new_keys: list[str]) -> None:
+def _sync_tab(tab, state: dict, by_id: dict, batch, new_keys: list[str]) -> None:
     key = str(tab.pid)
     ent = _entry(state, key)
-    session = transcript_module.resolve_session(tab.cwd)
-    sid = session.session_id if session else ""
-    tail = transcript_module.render_tail(session.path, _TAIL_MSGS) if session else "(no session)"
+    session = transcript_module.resolve(tab.pid, tab.cwd)
     rem = by_id.get(ent["reminder_id"])
-    if rem and rem.completed and key not in busy and tabsbody_module.parse_send(rem.body):
-        _dispatch(tab, ent, tabsbody_module.parse_send(rem.body), sid)
-        busy = busy | {key}
-    body = tabsbody_module.compose(tab, sid, tail, ent["turns"], key in busy)
-    title = tabsbody_module.title(tab)
+    carry = tabsbody_module.parse_send(rem.body) if rem else ""
+    if rem and rem.completed and carry:
+        _try_send(ent, session, carry)
+        carry = carry if ent["last_error"] else ""
+    body = tabsbody_module.compose(tab, session, ent["turns"], carry, ent.get("last_error", ""))
+    title = tabsbody_module.title(tab, session)
     if rem is None:
         batch.creates.append({"name": title, "body": body, "priority": 1})
         new_keys.append(key)
@@ -106,16 +101,14 @@ def sync() -> None:
     state = _load()
     if not tabs_disc and not state:
         return
-    _apply_replies(state)
     reminders_module.create_list(ln)
     by_id = {r.id: r for r in reminders_module.list_reminders(ln)}
-    busy = tabsend_module.active_keys()
     batch = reminders_module.Batch()
     new_keys: list[str] = []
     live = {str(t.pid) for t in tabs_disc}
 
     for tab in tabs_disc:
-        _sync_tab(tab, state, by_id, busy, batch, new_keys)
+        _sync_tab(tab, state, by_id, batch, new_keys)
     _gc(state, live, by_id, batch)
 
     new_ids = reminders_module.apply_batch(ln, batch) if not batch.empty() else []

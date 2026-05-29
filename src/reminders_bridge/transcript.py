@@ -1,8 +1,11 @@
-"""Resolve a cwd to its newest Claude Code session jsonl and render a tail.
+"""Resolve a live Claude Code tab to its session: id, jsonl, title, status.
 
-Mirrors Claude Code's on-disk layout: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`.
-The encoding replaces `/`, `.`, and `_` with `-` (verified against the live
-projects dir — dotted segments like `.claude-worktrees` become `--claude-...`).
+Two on-disk sources, keyed differently:
+- `~/.claude/sessions/<pid>.json` — authoritative per-pid record (sessionId,
+  cwd, status, name). Present for most interactive tabs.
+- `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` — the transcript. Its
+  `aiTitle` is the title Claude paints onto the Ghostty tab (the key we match
+  against the tab bar). Encoding replaces `/`, `.`, `_` with `-`.
 """
 
 import json
@@ -10,38 +13,68 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+_HOME = Path.home()
+_SESSIONS_DIR = _HOME / ".claude" / "sessions"
+_PROJECTS_DIR = _HOME / ".claude" / "projects"
 _ENCODE_RE = re.compile(r"[/._]")
+_AITITLE_RE = re.compile(r'"aiTitle":"((?:[^"\\]|\\.)*)"')
 
 
 @dataclass
 class Session:
     session_id: str
     path: str
+    title: str
+    status: str
+    cwd: str
 
 
 def encode_cwd(cwd: str) -> str:
     return _ENCODE_RE.sub("-", cwd)
 
 
-def resolve_session(cwd: str) -> Session | None:
-    if not cwd:
-        return None
-    dir_ = _PROJECTS_DIR / encode_cwd(cwd)
-    newest = _newest_jsonl(dir_)
-    if newest is None:
-        return None
-    return Session(session_id=newest.stem, path=str(newest))
-
-
-def _newest_jsonl(dir_: Path) -> Path | None:
+def _session_file(pid: int) -> dict:
     try:
-        files = [p for p in dir_.iterdir() if p.suffix == ".jsonl"]
+        return json.loads((_SESSIONS_DIR / f"{pid}.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _jsonl_path(cwd: str, session_id: str) -> Path:
+    return _PROJECTS_DIR / encode_cwd(cwd) / f"{session_id}.jsonl"
+
+
+def _newest_jsonl(cwd: str) -> Path | None:
+    try:
+        files = [p for p in (_PROJECTS_DIR / encode_cwd(cwd)).iterdir() if p.suffix == ".jsonl"]
     except OSError:
         return None
-    if not files:
-        return None
-    return max(files, key=lambda p: p.stat().st_mtime)
+    return max(files, key=lambda p: p.stat().st_mtime) if files else None
+
+
+def resolve(pid: int, cwd: str) -> Session | None:
+    meta = _session_file(pid)
+    sid = meta.get("sessionId", "")
+    cwd = meta.get("cwd") or cwd
+    if sid and cwd:
+        path = _jsonl_path(cwd, sid)
+    else:
+        newest = _newest_jsonl(cwd)
+        if newest is None:
+            return None
+        path, sid = newest, newest.stem
+    title = ai_title(path) or (meta.get("name") or "")
+    return Session(sid, str(path), title, meta.get("status", ""), cwd)
+
+
+def ai_title(path: Path) -> str:
+    """Last `aiTitle` in the jsonl — the title Claude paints on the tab."""
+    try:
+        text = path.read_text(errors="replace")
+    except OSError:
+        return ""
+    matches = _AITITLE_RE.findall(text)
+    return matches[-1].encode().decode("unicode_escape") if matches else ""
 
 
 def _text_of(content: object) -> str:
@@ -79,12 +112,11 @@ def render_tail(path: str, max_msgs: int = 6, max_chars: int = 400) -> str:
         msg = entry.get("message") if isinstance(entry, dict) else None
         if not isinstance(msg, dict):
             continue
-        role = msg.get("role")
-        if role not in ("user", "assistant"):
+        if msg.get("role") not in ("user", "assistant"):
             continue
         text = _text_of(msg.get("content"))
         if text:
-            msgs.append(f"{role}: {_clip(text, max_chars)}")
+            msgs.append(f"{msg['role']}: {_clip(text, max_chars)}")
     if not msgs:
         return "(no messages yet)"
     return "\n\n".join(msgs[-max_msgs:])
