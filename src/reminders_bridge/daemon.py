@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 import time
 
 from . import activity as activity_module
@@ -371,6 +372,21 @@ def _run_triggers() -> None:
         log.info("Launched %d session(s) from triggers lists", n)
 
 
+def _restart() -> None:
+    log.info("Restart requested via Settings — re-executing %s", sys.argv)
+    activity_module.record(settings_module.list_name(), "restarted", "", "via settings")
+    os.execv(sys.argv[0], sys.argv)
+
+
+def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
+    interval = settings.get("poll_interval")
+    if isinstance(interval, int) and interval > 0 and interval != cfg.poll_interval_s:
+        log.info("Poll interval set via Settings: %ds → %ds", cfg.poll_interval_s, interval)
+        cfg.poll_interval_s = interval
+    if settings.get("restart"):
+        _restart()
+
+
 def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
     with reminders_module.autorelease_pool():
         all_projects = projects_module.load_projects(cfg.registry_path, cfg.list_prefix)
@@ -379,6 +395,7 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
         settings = _safe("Settings list sync", settings_module.sync, cfg.list_prefix)
         if settings is None:
             settings = settings_module.defaults()
+        _apply_controls(cfg, settings)
         visible = [p for p in active if p.name not in hidden]
         log.info(
             "Registry: %d projects (%d with .beads, %d hidden, %d visible) | settings=%s",
