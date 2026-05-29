@@ -13,9 +13,10 @@ from . import transcript as transcript_module
 
 _SEND_RE = re.compile(r"(?mi)^[ \t]*send:[ \t]*")
 _HELP = (
-    "Type a message under `send:`, then tap the circle to send. The bridge "
-    "switches to this tab in Ghostty and types it in — exactly as you would. "
-    "(Needs the tab on the active Space + Accessibility permission.)"
+    "Write your message under `send:`, then mark this reminder complete to send "
+    "it. Completing the reminder is the send action. The bridge switches Ghostty "
+    "to this tab and types the message into the live session. "
+    "(Needs the tab on the active Space + Accessibility permission for the bridge.)"
 )
 
 
