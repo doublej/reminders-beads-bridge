@@ -25,40 +25,45 @@ on run argv
     tell application "Ghostty" to activate
     delay 0.25
     tell application "System Events"
-        if not (exists process "ghostty") then return "ERR:ghostty-not-running"
-        tell process "ghostty"
-            if (count of windows) is 0 then return "ERR:no-window-on-space"
-            repeat with w in windows
-                set matched to false
-                try
-                    set tg to first UI element of w whose role is "AXTabGroup"
-                    repeat with rb in (radio buttons of tg)
-                        if my stripPrefix(title of rb) is target then
-                            perform action "AXPress" of rb
-                            set matched to true
-                            exit repeat
-                        end if
-                    end repeat
-                end try
-                if not matched and (my stripPrefix(title of w)) is target then
-                    perform action "AXRaise" of w
-                    set matched to true
-                end if
-                if matched then
-                    delay 0.2
-                    set ft to ""
+        set procs to (every process whose name is "ghostty")
+        if procs is {} then return "ERR:ghostty-not-running"
+        set sawWindow to false
+        repeat with p in procs
+            tell p
+                repeat with w in windows
+                    set sawWindow to true
+                    set matched to false
                     try
-                        set ft to my stripPrefix(title of (value of attribute "AXFocusedWindow"))
+                        set tg to first UI element of w whose role is "AXTabGroup"
+                        repeat with rb in (radio buttons of tg)
+                            if my stripPrefix(title of rb) is target then
+                                perform action "AXPress" of rb
+                                set matched to true
+                                exit repeat
+                            end if
+                        end repeat
                     end try
-                    if ft is not target then return "ERR:focus-mismatch:" & ft
-                    keystroke "v" using {command down}
-                    delay 0.1
-                    key code 36
-                    return "OK"
-                end if
-            end repeat
-            return "ERR:tab-not-found"
-        end tell
+                    if not matched and (my stripPrefix(title of w)) is target then
+                        perform action "AXRaise" of w
+                        set matched to true
+                    end if
+                    if matched then
+                        delay 0.2
+                        set ft to ""
+                        try
+                            set ft to my stripPrefix(title of (value of attribute "AXFocusedWindow"))
+                        end try
+                        if ft is not target then return "ERR:focus-mismatch:" & ft
+                        keystroke "v" using {command down}
+                        delay 0.1
+                        key code 36
+                        return "OK"
+                    end if
+                end repeat
+            end tell
+        end repeat
+        if not sawWindow then return "ERR:no-window-on-space"
+        return "ERR:tab-not-found"
     end tell
 end run
 """
