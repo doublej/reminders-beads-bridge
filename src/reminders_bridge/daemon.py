@@ -16,6 +16,7 @@ from . import config as config_module
 from . import fixer as fixer_module
 from . import link as link_module
 from . import mailbox as mailbox_module
+from . import migrate as migrate_module
 from . import projects_list as projects_list_module
 from . import readme as readme_module
 from . import projects as projects_module
@@ -349,7 +350,7 @@ def _safe(name: str, fn, *args, **kwargs):
                 f"{n} (x{c}): {_fail_messages[n]}"
                 for n, c in _fail_counts.items()
             ]
-            list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+            list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "_rb_claude_sessions")
             if fixer_module.trigger_auto(errors, list_name):
                 escalated = [n for n, c in _fail_counts.items() if c >= _FAIL_THRESHOLD]
                 for n in escalated:
@@ -361,8 +362,8 @@ def _safe(name: str, fn, *args, **kwargs):
     return result
 
 
-def _run_activity(prefix: str) -> None:
-    activity_module.sync(prefix)
+def _run_activity() -> None:
+    activity_module.sync()
     activity_module.prune()
 
 
@@ -393,8 +394,9 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
     with reminders_module.autorelease_pool():
         all_projects = projects_module.load_projects(cfg.registry_path, cfg.list_prefix)
         active = projects_module.filter_existing(all_projects)
+        _safe("List migration", migrate_module.run, cfg.list_prefix, active)
         hidden = _safe("Projects list sync", projects_list_module.sync, cfg.list_prefix, active) or set()
-        settings = _safe("Settings list sync", settings_module.sync, cfg.list_prefix)
+        settings = _safe("Settings list sync", settings_module.sync)
         if settings is None:
             settings = settings_module.defaults()
         _apply_controls(cfg, settings)
@@ -408,8 +410,8 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
             settings,
         )
         client = api_module.Client(base_url=cfg.api_url, timeout_s=cfg.api_timeout_s)
-        _safe("Readme list sync", readme_module.sync, cfg.list_prefix)
-        _safe("Activity list sync", _run_activity, cfg.list_prefix)
+        _safe("Readme list sync", readme_module.sync)
+        _safe("Activity list sync", _run_activity)
         _safe("Capture poll", captures_module.poll)
         _safe("Sessions poll", sessions_module.poll)
         _safe("Tabs sync", tabs_module.sync)

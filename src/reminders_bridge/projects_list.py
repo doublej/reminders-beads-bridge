@@ -11,7 +11,7 @@ from . import state as state_module
 
 log = logging.getLogger(__name__)
 
-_LIST_SUFFIX = "Projects"
+_LIST_SUFFIX = "projects"
 
 
 def list_name(prefix: str) -> str:

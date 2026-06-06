@@ -79,7 +79,7 @@ def status() -> None:
         print(f"(master list unavailable: {e})")
         hidden = set()
     try:
-        settings_values = settings_module.sync(cfg.list_prefix)
+        settings_values = settings_module.sync()
     except RuntimeError as e:
         print(f"(settings list unavailable: {e})")
         settings_values = settings_module.defaults()

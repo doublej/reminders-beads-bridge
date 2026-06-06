@@ -1,4 +1,4 @@
-"""`Claude: Tabs` lane — one reminder per live Ghostty tab running Claude Code.
+"""`_rb_claude_tabs` lane — one reminder per live Ghostty tab running Claude Code.
 
 Read side: each reminder body mirrors the tab's title, status, and a live tail
 of its session transcript. Send side: type a message under `send:` and complete
@@ -31,7 +31,7 @@ _STATE_PATH = Path(
 
 
 def list_name() -> str:
-    return os.getenv("RBRIDGE_TABS_LIST", "Claude: Tabs")
+    return os.getenv("RBRIDGE_TABS_LIST", "_rb_claude_tabs")
 
 
 def _load() -> dict:

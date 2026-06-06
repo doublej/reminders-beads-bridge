@@ -35,7 +35,7 @@ def load() -> Config:
             os.getenv("RBRIDGE_STATE", "~/.claude/reminders-bridge-state.json")
         ).expanduser(),
         poll_interval_s=float(os.getenv("RBRIDGE_POLL_S", "30")),
-        list_prefix=os.getenv("RBRIDGE_LIST_PREFIX", "Beads: "),
+        list_prefix=os.getenv("RBRIDGE_LIST_PREFIX", "_rb_beads_"),
         statuses=statuses,
         api_url=os.getenv("RBRIDGE_API_URL", "http://localhost:5173"),
         api_timeout_s=float(os.getenv("RBRIDGE_API_TIMEOUT_S", "10")),

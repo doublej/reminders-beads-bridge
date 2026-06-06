@@ -10,8 +10,8 @@ from typing import Deque
 from . import atomicio as atomicio_module
 from . import reminders as reminders_module
 
-_LIST_SUFFIX = "Activity"
-_LEGACY_SUFFIXES = ("__log__",)
+_LIST_NAME = os.getenv("RBRIDGE_ACTIVITY_LIST", "_rb_activity")
+_LEGACY_NAMES = ("Beads: __log__",)  # truly dead; current name is migrated, not deleted
 _TITLE = "Recent activity"
 _MAX_ENTRIES = 200
 _DEFAULT_PATH = Path("~/.claude/reminders-bridge-activity.jsonl").expanduser()
@@ -21,8 +21,8 @@ def _path() -> Path:
     return Path(os.getenv("RBRIDGE_ACTIVITY", str(_DEFAULT_PATH))).expanduser()
 
 
-def list_name(prefix: str) -> str:
-    return f"{prefix}{_LIST_SUFFIX}"
+def list_name() -> str:
+    return _LIST_NAME
 
 
 def record(project: str, kind: str, bead_id: str | None = None, detail: str = "") -> None:
@@ -70,11 +70,11 @@ def _format(entries: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def sync(prefix: str) -> None:
-    ln = list_name(prefix)
-    for legacy in _LEGACY_SUFFIXES:
+def sync() -> None:
+    ln = list_name()
+    for legacy in _LEGACY_NAMES:
         try:
-            reminders_module.delete_list(f"{prefix}{legacy}")
+            reminders_module.delete_list(legacy)
         except RuntimeError:
             pass
     reminders_module.create_list(ln)

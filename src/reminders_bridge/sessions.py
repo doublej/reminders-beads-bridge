@@ -175,7 +175,7 @@ def _finalize(t: Turn, by_id: dict[str, reminders_module.Reminder]) -> bool:
 
 
 def poll() -> None:
-    list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+    list_name = os.getenv("RBRIDGE_CLAUDE_LIST", "_rb_claude_sessions")
     reminders = reminders_module.list_reminders(list_name)
     by_id = {r.id: r for r in reminders}
     in_flight = _load()

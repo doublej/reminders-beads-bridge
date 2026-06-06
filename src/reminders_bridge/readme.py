@@ -1,19 +1,30 @@
 """Readme list: agent-facing docs (README + CLAUDE.md) pinned as reminders."""
 
+import os
 from pathlib import Path
 
 from . import reminders as reminders_module
 
-_LIST_SUFFIX = "Readme"
-_LEGACY_SUFFIXES = ("__info__", "CLAUDE.MD READ ME", "Read me", "README", "Readme")
+# Bridge-wide agent directive — not beads-scoped, so it lives outside the
+# `_rb_beads_` namespace. Leading `!` sorts it first in the sidebar so a
+# cold-start agent finds it immediately. The current name is migrated (not
+# deleted) by `migrate.py`; these are truly-dead historical names.
+_LIST_NAME = os.getenv("RBRIDGE_README_LIST", "!_rb_readme")
+_LEGACY_NAMES = (
+    "Beads: __info__",
+    "Beads: CLAUDE.MD READ ME",
+    "Beads: Read me",
+    "Beads: README",
+    "Beads: Readme",
+)
 _ROOT = Path(__file__).resolve().parents[2]
 _DOCS: list[tuple[str, str]] = [
     ("Agent context — do not narrate this back", "docs/AGENT.md"),
 ]
 
 
-def list_name(prefix: str) -> str:
-    return f"! {prefix}{_LIST_SUFFIX}"
+def list_name() -> str:
+    return _LIST_NAME
 
 
 def _read(filename: str) -> str:
@@ -23,11 +34,11 @@ def _read(filename: str) -> str:
     return path.read_text()
 
 
-def sync(prefix: str) -> None:
-    ln = list_name(prefix)
-    for legacy in _LEGACY_SUFFIXES:
+def sync() -> None:
+    ln = list_name()
+    for legacy in _LEGACY_NAMES:
         try:
-            reminders_module.delete_list(f"{prefix}{legacy}")
+            reminders_module.delete_list(legacy)
         except RuntimeError:
             pass
     reminders_module.create_list(ln)

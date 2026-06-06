@@ -148,6 +148,30 @@ def delete_list(name: str) -> bool:
     return True
 
 
+def rename_list(old: str, new: str) -> bool:
+    """Rename a list in place, preserving every reminder it holds.
+
+    Used for lossless list migrations: renaming the calendar keeps the
+    reminders (and the user state encoded in them — notes, completion,
+    value bodies) intact. No-op if ``old`` is absent; refuses to clobber an
+    existing ``new`` (returns False) so a half-migrated state can't merge
+    two lists.
+    """
+    if old == new:
+        return False
+    store = get_store()
+    cal = _find_calendar(store, old)
+    if cal is None:
+        return False
+    if _find_calendar(store, new) is not None:
+        return False
+    cal.setTitle_(new)
+    ok, err = store.saveCalendar_commit_error_(cal, True, None)
+    if not ok:
+        raise RuntimeError(f"rename {old!r}->{new!r} failed: {err}")
+    return True
+
+
 def _to_reminder(r: EKReminder) -> Reminder:
     return Reminder(
         id=str(r.calendarItemIdentifier()),

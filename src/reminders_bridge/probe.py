@@ -15,7 +15,7 @@ from Foundation import NSDate, NSDateComponents, NSURL  # type: ignore[import-no
 
 from . import reminders as rm
 
-_LIST = "Beads: __probe__"
+_LIST = "_rb_probe"
 _READ_FIELDS = [
     "title",
     "notes",

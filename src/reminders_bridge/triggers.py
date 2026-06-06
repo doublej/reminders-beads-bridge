@@ -1,6 +1,6 @@
 """Standalone session triggers. No coupling to beads.
 
-Two reminders lists, `Claude: Sessions` and `Codex: Sessions`. Each unchecked
+Two reminders lists, `_rb_claude_sessions` and `_rb_codex_sessions`. Each unchecked
 reminder is a pending request: title is the prompt, optional `cwd: <path>`
 line in the body sets the working directory, the rest of the body is appended
 to the prompt. Daemon scans both lists every cycle, launches Ghostty for each
@@ -27,11 +27,11 @@ _CAPTURE_RE = re.compile(
 
 
 def claude_list_name() -> str:
-    return os.getenv("RBRIDGE_CLAUDE_LIST", "Claude: Sessions")
+    return os.getenv("RBRIDGE_CLAUDE_LIST", "_rb_claude_sessions")
 
 
 def codex_list_name() -> str:
-    return os.getenv("RBRIDGE_CODEX_LIST", "Codex: Sessions")
+    return os.getenv("RBRIDGE_CODEX_LIST", "_rb_codex_sessions")
 
 
 def parse_request(rem: reminders_module.Reminder) -> tuple[Path, str, bool]:

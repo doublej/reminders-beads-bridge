@@ -7,8 +7,9 @@
   sync parses + clamps it and re-renders the body (e.g. poll interval).
 
 The list is bridge-global (restart, poll interval, display toggles), so it lives
-under the `rbridge:` namespace rather than the beads `{prefix}` — overridable via
-RBRIDGE_SETTINGS_LIST. The pre-rename `{prefix}Settings` list is deleted on sync.
+under the bare `_rb_` namespace rather than the beads `_rb_beads_` prefix —
+overridable via RBRIDGE_SETTINGS_LIST. Pre-rename names are migrated losslessly
+by `migrate.py` (rename, not delete — preserves the user's configured values).
 """
 
 import os
@@ -17,7 +18,7 @@ from dataclasses import dataclass
 
 from . import reminders as reminders_module
 
-_LIST_NAME = os.getenv("RBRIDGE_SETTINGS_LIST", "rbridge: Settings")
+_LIST_NAME = os.getenv("RBRIDGE_SETTINGS_LIST", "_rb_settings")
 _VALUE_RE = re.compile(r"(?mi)^[ \t]*value:[ \t]*(\d+)")
 
 
@@ -76,16 +77,6 @@ def list_name() -> str:
     return _LIST_NAME
 
 
-def _delete_legacy(prefix: str) -> None:
-    for legacy in (f"{prefix}Settings", "Beads: Settings"):
-        if legacy == _LIST_NAME:
-            continue
-        try:
-            reminders_module.delete_list(legacy)
-        except RuntimeError:
-            pass
-
-
 def _clamp(s: Setting, v: int) -> int:
     return max(s.vmin, min(s.vmax, v))
 
@@ -130,10 +121,9 @@ def _create_body(s: Setting) -> str:
     return _value_body(s, s.vdefault) if s.kind == "value" else s.body
 
 
-def sync(prefix: str) -> "dict[str, bool | int]":
+def sync() -> "dict[str, bool | int]":
     """Reconcile settings list. Return {key: value} for every known setting."""
     ln = list_name()
-    _delete_legacy(prefix)
     reminders_module.create_list(ln)
     by_name: dict[str, list[reminders_module.Reminder]] = {}
     for r in reminders_module.list_reminders(ln):

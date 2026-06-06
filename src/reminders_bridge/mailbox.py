@@ -29,16 +29,24 @@ _LEGACY_VOICE_LIST_PREFIX = "Beads: Voice: "
 
 
 def _voice_prefix() -> str:
-    return os.getenv("RBRIDGE_VOICE_LIST_PREFIX", "Voice: ")
+    return os.getenv("RBRIDGE_VOICE_LIST_PREFIX", "_rb_voice_")
 
 
 def voice_list_prefix() -> str:
-    """Full prefix for voice exchange list names (default ``Voice: ``)."""
+    """Full prefix for voice exchange list names (default ``_rb_voice_``)."""
     return _voice_prefix()
 
 
+# Prefixes that have ever named a voice list — the active default plus the
+# two pre-rename forms. Existing exchanges store their list name in state, so
+# they keep working under the old prefix; this set keeps the project-hide path
+# from ever deleting any of them.
+def _voice_prefixes() -> tuple[str, ...]:
+    return (voice_list_prefix(), "Voice: ", _LEGACY_VOICE_LIST_PREFIX)
+
+
 def is_voice_list_name(name: str) -> bool:
-    return name.startswith(voice_list_prefix())
+    return any(name.startswith(p) for p in _voice_prefixes())
 
 
 def list_name_for(slug: str) -> str:
