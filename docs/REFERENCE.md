@@ -89,7 +89,7 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
-| `RBRIDGE_VOICE_LIST_PREFIX` | `_rb_voice_` | Prefix for new voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). Existing exchanges keep their stored `list_name` and are not auto-renamed. |
+| `RBRIDGE_VOICE_LIST_PREFIX` | `_rb_voice_` | Prefix for new voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). Existing exchanges on a pre-`_rb_` name are migrated losslessly each cycle (list renamed, stored `list_name` rewritten). |
 | `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
 | `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
 | `RBRIDGE_VOICE_NAV` | `true` | Master switch for voice-exchange file navigation (`fetch:` / `grep:` / `tree:`). Set `false` to stop serving files entirely. |

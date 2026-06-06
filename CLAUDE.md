@@ -170,10 +170,11 @@ fires on `done` detection), `voice-closed` (with reason: `user` /
 (file-navigation request served / refused — `navigation.py`).
 
 **New env vars** (full list also in README):
-- `RBRIDGE_VOICE_LIST_PREFIX` (default `_rb_voice_`) — prefix for new voice
+- `RBRIDGE_VOICE_LIST_PREFIX` (default `_rb_voice_`) — prefix for voice
   list names. Final = `{this}{slug}`. Does not combine with
-  `RBRIDGE_LIST_PREFIX`. Existing exchanges keep their stored `list_name`
-  and are not auto-renamed.
+  `RBRIDGE_LIST_PREFIX`. Existing exchanges on a pre-`_rb_` name are
+  migrated losslessly each cycle (`mailbox._migrate_list_names`): the list
+  is renamed and the stored `list_name` rewritten.
 - `RBRIDGE_MAILBOX_DIR` (default `~/.claude/voice-mailboxes`).
 - `RBRIDGE_MAILBOX_MIRROR` (default `true`) — set false to disable the
   default-list breadcrumb.
