@@ -3,8 +3,19 @@
 - ``toggle`` — completed = enabled (e.g. show_completed).
 - ``action`` — completing it fires a one-shot action; sync auto-resets it to
   unchecked and reports ``True`` for that cycle (e.g. restart the bridge).
-- ``value`` — an integer the user edits on the ``value:`` line in the body;
-  sync parses + clamps it and re-renders the body (e.g. poll interval).
+- ``value`` — an integer the user edits inside the ``<rb:value>`` tag in the
+  body; sync parses + clamps it and re-renders the body (e.g. poll interval).
+
+Every setting body ends with exactly one daemon-owned control tag — the strong,
+repeatable grammar the surface is parsed against:
+
+    <rb:toggle/>                              # toggle: state lives in the checkbox
+    <rb:action/>                              # action: fire via the checkbox
+    <rb:value min="100" max="600000">5000</rb:value>   # value: edit the number
+
+The tag is re-rendered every sync, so a deleted/mangled tag self-heals and an
+out-of-range value visibly snaps to the clamped one. Free prose above the tag is
+the human description; only the tag is read back.
 
 The list is bridge-global (restart, poll interval, display toggles), so it lives
 under the bare `_rb_` namespace rather than the beads `_rb_beads_` prefix —
@@ -19,7 +30,7 @@ from dataclasses import dataclass
 from . import reminders as reminders_module
 
 _LIST_NAME = os.getenv("RBRIDGE_SETTINGS_LIST", "_rb_settings")
-_VALUE_RE = re.compile(r"(?mi)^[ \t]*value:[ \t]*(\d+)")
+_VALUE_RE = re.compile(r"<rb:value\b[^>]*>\s*(-?\d+)\s*</rb:value>")
 
 
 @dataclass(frozen=True)
@@ -63,8 +74,8 @@ SETTINGS: tuple[Setting, ...] = (
         vmax=600000,
         body=(
             "How often the bridge polls when no Reminders change event has "
-            "fired, in milliseconds (100–600000). Edit the number on the value "
-            "line below, then save. Lower = faster, heavier. Note: the bridge "
+            "fired, in milliseconds (100–600000). Edit the number inside the "
+            "<rb:value> tag below, then save. Lower = faster, heavier. Note: the bridge "
             "already syncs instantly on Reminders changes, so this mainly speeds "
             "up picking up non-Reminders changes (beads, tabs); the effective "
             "rate is bounded by how long a sync takes (~seconds)."
@@ -81,8 +92,16 @@ def _clamp(s: Setting, v: int) -> int:
     return max(s.vmin, min(s.vmax, v))
 
 
-def _value_body(s: Setting, value: int) -> str:
-    return f"{s.body}\n\nvalue: {value}"
+def _control_tag(s: Setting, value: int) -> str:
+    if s.kind == "value":
+        return f'<rb:value min="{s.vmin}" max="{s.vmax}">{value}</rb:value>'
+    if s.kind == "action":
+        return "<rb:action/>"
+    return "<rb:toggle/>"
+
+
+def _rendered_body(s: Setting, value: int = 0) -> str:
+    return f"{s.body}\n\n{_control_tag(s, value)}"
 
 
 def _default(s: Setting) -> "bool | int":
@@ -98,27 +117,27 @@ def _reconcile(s: Setting, keep: reminders_module.Reminder, batch) -> "bool | in
     if s.kind == "value":
         found = _VALUE_RE.findall(keep.body)
         value = _clamp(s, int(found[-1])) if found else s.vdefault
-        expected = _value_body(s, value)
+        expected = _rendered_body(s, value)
         if keep.body != expected:
             batch.updates.append({"id": keep.id, "body": expected})
         return value
     if s.kind == "action":
         fired = bool(keep.completed)
         patch: dict = {"id": keep.id}
-        if keep.body != s.body:
-            patch["body"] = s.body
+        if keep.body != _rendered_body(s):
+            patch["body"] = _rendered_body(s)
         if fired:
             patch["completed"] = False  # auto-reset one-shot
         if len(patch) > 1:
             batch.updates.append(patch)
         return fired
-    if keep.body != s.body:
-        batch.updates.append({"id": keep.id, "body": s.body})
+    if keep.body != _rendered_body(s):
+        batch.updates.append({"id": keep.id, "body": _rendered_body(s)})
     return bool(keep.completed)
 
 
 def _create_body(s: Setting) -> str:
-    return _value_body(s, s.vdefault) if s.kind == "value" else s.body
+    return _rendered_body(s, s.vdefault)
 
 
 def sync() -> "dict[str, bool | int]":
