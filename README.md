@@ -20,7 +20,7 @@ Claude Code / Codex sessions, and voice exchanges with Claude Voice.
 - **Voice exchanges** — the project agent composes a brief; the user
   walks with the voice agent; structured responses come back as
   reminders the project agent drains via `rbridge mailbox read`.
-- **Claude tabs** — `Claude: Tabs` mirrors every live Ghostty tab running
+- **Claude tabs** — `_rb_claude_tabs` mirrors every live Ghostty tab running
   Claude Code as one reminder: read a live transcript tail, or type under
   `send:` and check the box to have the bridge switch to that tab and type
   your message into the live session — exactly as you would.

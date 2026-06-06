@@ -14,7 +14,7 @@
 A macOS daemon that turns Apple Reminders into a control surface for two things:
 
 1. **Beads issue sync** — one Reminders list per beads project, one reminder per issue, plus four daemon-managed control lists.
-2. **Claude Code / Codex sessions** — separate `Claude: Sessions` and `Codex: Sessions` lists where each reminder launches a session. Three modes: interactive (Ghostty), one-shot capture, or persistent multi-turn chat driven entirely from the reminder body.
+2. **Claude Code / Codex sessions** — separate `_rb_claude_sessions` and `_rb_codex_sessions` lists where each reminder launches a session. Three modes: interactive (Ghostty), one-shot capture, or persistent multi-turn chat driven entirely from the reminder body.
 
 Everything is one-way (beads → reminder) except a small set of reverse signals: check to close, uncheck to reopen, add an unprefixed reminder to capture.
 
@@ -29,22 +29,22 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
   - Bead deleted → reminder deleted.
   - Reminder completed in Reminders.app → bead closed via `bd close`.
   - Reminder unchecked in Reminders.app → bead reopened via `bd reopen`.
-  - New reminder (no `bd-id:` prefix) added to a `Beads: <project>` list → bead created via `bd create`.
+  - New reminder (no `bd-id:` prefix) added to a `_rb_beads_<project>` list → bead created via `bd create`.
   - Reminder title/body edits inside `<bb:meta>` / `<bb:desc>` → overwritten on next sync (beads wins). Free-form text inside `<bb:notes>` is preserved.
 
 ## The lists you'll see in Reminders
 
 | List | Purpose | Who writes it |
 |------|---------|---------------|
-| `Beads: <project>` | One per registered project, one reminder per bead. Title is `{bead-id}: {title}`. | Daemon ↔ user (notes + completion + capture). |
-| `Beads: Projects` | One reminder per project. **Check to hide** that project — its `Beads: <project>` list is deleted within seconds. Uncheck to bring it back; the daemon recreates the list and reminders from beads. | Daemon writes the rows; you only toggle the checkbox. |
-| `rbridge: Settings` | Bridge-global controls (renamed from `Beads: Settings`; legacy list auto-deleted). Three kinds: **toggles** (`Show completed tasks` — off → closed beads pruned, on → surfaced as completed), an **action** (`Restart bridge` — complete it to re-exec the daemon; it un-completes itself), and a **value** (`Poll interval (ms)` — edit the `value:` line, 100–600000 ms, applied live). | Daemon writes the rows; you complete/edit them. |
-| `! Beads: Readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `! ` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. | Daemon (overwrites drift). |
-| `Beads: Activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). | Daemon (overwrites drift). |
-| `Voice: <slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `Beads: ` prefix — the voice flow is independent of beads. | Agent + user (responses). |
-| `Claude: Tabs` | One reminder per live Ghostty tab running Claude Code. Body = status header + live transcript tail + message log + a `send:` region. See "Claude tabs". Deliberately drops the `Beads: ` prefix — independent of beads. | Daemon writes the body; you type under `send:` and check to send. |
+| `_rb_beads_<project>` | One per registered project, one reminder per bead. Title is `{bead-id}: {title}`. | Daemon ↔ user (notes + completion + capture). |
+| `_rb_beads_projects` | One reminder per project. **Check to hide** that project — its `_rb_beads_<project>` list is deleted within seconds. Uncheck to bring it back; the daemon recreates the list and reminders from beads. | Daemon writes the rows; you only toggle the checkbox. |
+| `_rb_settings` | Bridge-global controls (any pre-rename `Beads: Settings` / `rbridge: Settings` list is migrated in place via a lossless calendar rename). Each control body carries a uniform daemon-owned XML tag. Three kinds: **toggles** (`Show completed tasks` — body `<rb:toggle/>`; off → closed beads pruned, on → surfaced as completed), an **action** (`Restart bridge` — body `<rb:action/>`; complete it to re-exec the daemon; it un-completes itself), and a **value** (`Poll interval (ms)` — edit the int inside the body's `<rb:value min="100" max="600000">5000</rb:value>` tag, 100–600000 ms, applied live; out-of-range snaps to the clamp). | Daemon writes the rows; you complete/edit them. |
+| `!_rb_readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `!` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_README_LIST`). | Daemon (overwrites drift). |
+| `_rb_activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_ACTIVITY_LIST`). | Daemon (overwrites drift). |
+| `_rb_voice_<slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `_rb_beads_` prefix — the voice flow is independent of beads. | Agent + user (responses). |
+| `_rb_claude_tabs` | One reminder per live Ghostty tab running Claude Code. Body = status header + live transcript tail + message log + a `send:` region. See "Claude tabs". Deliberately drops the `_rb_beads_` prefix — independent of beads. | Daemon writes the body; you type under `send:` and check to send. |
 
-Hiding a project via `Beads: Projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
+Hiding a project via `_rb_beads_projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
 
 ## Quick start
 
@@ -69,25 +69,27 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_REGISTRY` | `~/.beads-kanban-projects.json` | Project registry path |
 | `RBRIDGE_STATE` | `~/.claude/reminders-bridge-state.json` | Link map persistence |
 | `RBRIDGE_POLL_S` | `30` | Initial fallback poll interval (seconds, float). launchd plist sets `5`. The `Poll interval (ms)` setting overrides this live at runtime (millisecond granularity). |
-| `RBRIDGE_LIST_PREFIX` | `Beads: ` | Reminders list prefix (per project) |
-| `RBRIDGE_SETTINGS_LIST` | `rbridge: Settings` | Name of the bridge-global settings/controls list (independent of `RBRIDGE_LIST_PREFIX`). |
+| `RBRIDGE_LIST_PREFIX` | `_rb_beads_` | Reminders list prefix (per project) |
+| `RBRIDGE_SETTINGS_LIST` | `_rb_settings` | Name of the bridge-global settings/controls list (independent of `RBRIDGE_LIST_PREFIX`). |
+| `RBRIDGE_README_LIST` | `!_rb_readme` | Name of the pinned agent-context (Readme) list (independent of `RBRIDGE_LIST_PREFIX`). |
+| `RBRIDGE_ACTIVITY_LIST` | `_rb_activity` | Name of the rolling activity-log list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
 | `RBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
 | `RBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
-| `RBRIDGE_CLAUDE_LIST` | `Claude: Sessions` | Reminders list that drives Claude sessions. |
-| `RBRIDGE_CODEX_LIST` | `Codex: Sessions` | Reminders list that drives Codex sessions. |
+| `RBRIDGE_CLAUDE_LIST` | `_rb_claude_sessions` | Reminders list that drives Claude sessions. |
+| `RBRIDGE_CODEX_LIST` | `_rb_codex_sessions` | Reminders list that drives Codex sessions. |
 | `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN` | (auto-found on `$PATH`) | Explicit binary path for the session engine. |
 | `RBRIDGE_GHOSTTY_APP` | `/Applications/Ghostty.app` | Terminal bundle used for interactive sessions. |
 | `RBRIDGE_CLAUDE_FLAGS` | (empty) | Extra flags passed to `claude -p` in chat / capture / fixer modes. |
 | `RBRIDGE_CAPTURE_TIMEOUT_S` | `1800` | Hard timeout per capture session. |
 | `RBRIDGE_SESSIONS_TIMEOUT_S` | `900` | Hard timeout per chat-mode turn. |
-| `RBRIDGE_TABS_LIST` | `Claude: Tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
+| `RBRIDGE_TABS_LIST` | `_rb_claude_tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
 | `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, sent log, last error). |
 | `RBRIDGE_TABS_TAIL_MSGS` | `6` | Number of recent messages shown in the live transcript tail. |
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
-| `RBRIDGE_VOICE_LIST_PREFIX` | `Voice: ` | Prefix for voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). |
+| `RBRIDGE_VOICE_LIST_PREFIX` | `_rb_voice_` | Prefix for new voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). Existing exchanges keep their stored `list_name` and are not auto-renamed. |
 | `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
 | `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
 | `RBRIDGE_VOICE_NAV` | `true` | Master switch for voice-exchange file navigation (`fetch:` / `grep:` / `tree:`). Set `false` to stop serving files entirely. |
@@ -111,12 +113,12 @@ uv run rbridge run       # persistent poll loop
 - `rbridge tabs` — list live Ghostty tabs running Claude Code (pid / tty / mode / session / project). Read-only.
 ## Sessions: launching Claude / Codex from Reminders
 
-Two reminders lists drive standalone agent sessions, fully decoupled from the beads sync. Toggling `Beads: Projects`, hiding projects, or having no `.beads/` directories has no effect here.
+Two reminders lists drive standalone agent sessions, fully decoupled from the beads sync. Toggling `_rb_beads_projects`, hiding projects, or having no `.beads/` directories has no effect here.
 
 | List | Engine | Default name |
 |------|--------|--------------|
-| `Claude: Sessions` | `claude` | override with `RBRIDGE_CLAUDE_LIST` |
-| `Codex: Sessions`  | `codex`  | override with `RBRIDGE_CODEX_LIST` |
+| `_rb_claude_sessions` | `claude` | override with `RBRIDGE_CLAUDE_LIST` |
+| `_rb_codex_sessions`  | `codex`  | override with `RBRIDGE_CODEX_LIST` |
 
 Each unchecked reminder is a session request. The body headers pick which of three modes runs:
 
@@ -188,14 +190,14 @@ chat: true
 fixer: true
 
 you:
-The Codex: Sessions list isn't picking up new reminders. Investigate.
+The _rb_codex_sessions list isn't picking up new reminders. Investigate.
 ```
 
-Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Readme list sync`, …) fails `RBRIDGE_FIXER_THRESHOLD` times in a row (default 5), the daemon writes its own fixer reminder titled `rbridge auto-fixer` into `Claude: Sessions` with the error trail in the body. Cooldown: `RBRIDGE_FIXER_COOLDOWN_S` (default 3600) prevents loops.
+Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Readme list sync`, …) fails `RBRIDGE_FIXER_THRESHOLD` times in a row (default 5), the daemon writes its own fixer reminder titled `rbridge auto-fixer` into `_rb_claude_sessions` with the error trail in the body. Cooldown: `RBRIDGE_FIXER_COOLDOWN_S` (default 3600) prevents loops.
 
 ## Claude tabs
 
-`Claude: Tabs` is a standalone lane (peer to Sessions and Voice; no beads coupling) that mirrors every **live Ghostty tab running Claude Code** as one reminder. It's read-from-anywhere: a glanceable status board plus an inbox you can reply into from your phone. Driven by `tabs.sync()` once per cycle.
+`_rb_claude_tabs` is a standalone lane (peer to Sessions and Voice; no beads coupling) that mirrors every **live Ghostty tab running Claude Code** as one reminder. It's read-from-anywhere: a glanceable status board plus an inbox you can reply into from your phone. Driven by `tabs.sync()` once per cycle.
 
 **Discovery** (`ghostty.py`, modelled on the `claude-activity-watcher` tool): the daemon finds the Ghostty root process (`Ghostty.app/Contents/MacOS/ghostty`), then every interactive `claude` process (argv0 basename `claude`, a real tty, ancestor chain reaching Ghostty — this excludes the `claude daemon` and detached `versions/<x>` helpers). Each qualifying process is one tab. The tab's cwd comes from `lsof`; the session jsonl is the newest file under `~/.claude/projects/<encoded-cwd>/` (`transcript.py`).
 
@@ -218,7 +220,7 @@ Title resolution + session id come from `~/.claude/sessions/<pid>.json` (authori
 - The target tab must be on the **active Space** — windows on other Spaces are invisible to the accessibility API.
 - It steals focus to Ghostty for ~1s (that's what typing is). There's a sub-second race if you switch tabs at the exact moment it pastes.
 
-**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `Claude: Sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-send-failed`, `tab-closed`.
+**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `_rb_claude_sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-send-failed`, `tab-closed`.
 
 `rbridge tabs` prints the discovered tabs (pid / tty / mode / session / project) without touching Reminders.
 
@@ -255,7 +257,7 @@ commits — keep the cross-surface vocabulary consistent.
 | **mailbox** | Implementation-level name for the state object (slug + list_name + brief_path + kind). User-facing docs prefer "voice exchange"; CLI subcommand is `rbridge mailbox …`. |
 | **slug** | `[a-z0-9][a-z0-9-]{0,47}` kebab-case label identifying the exchange. Topic-first, project-agent-picked. |
 | **brief** | The handoff document the project agent composes for the voice agent. Saved to disk; mirrored into the exchange list as a daemon-owned reminder. |
-| **exchange list** | The `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list (default `Voice: <slug>`). Holds the header reminder, brief reminder, and user responses. Independent of the `Beads: ` namespace — voice flow has no beads coupling. |
+| **exchange list** | The `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list (default `_rb_voice_<slug>`). Holds the header reminder, brief reminder, and user responses. Independent of the `_rb_beads_` namespace — voice flow has no beads coupling. |
 | **header reminder** | Daemon-owned `How this list works` reminder pinned in the exchange list. |
 | **brief reminder** | Daemon-owned `Brief for <slug>` reminder holding the brief text. |
 | **mirror reminder** | Silent breadcrumb `Voice exchange open: <slug>` in the user's default Reminders list. High-priority, no alarm, no notification. |
@@ -283,14 +285,14 @@ The intended flow is:
    in evidence, not paraphrased recall. It then composes a TTS-friendly
    brief, saves it under `~/.claude/voice-mailboxes/<slug>.brief.md`,
    and pipes it into `rbridge mailbox open`.
-2. The bridge creates `Voice: <slug>` with two daemon-owned reminders:
+2. The bridge creates `_rb_voice_<slug>` with two daemon-owned reminders:
    a header (how the list works, prefix conventions, the read command) and
    the brief itself. Both are flagged high priority.
 3. A silent breadcrumb reminder `Voice exchange open: <slug>` is dropped
    into the user's default Reminders list — high-priority but **no alarm,
    no notification**. The user discovers it on their next glance.
 4. The user takes a voice walk with the voice agent. The brief tells the
-   voice agent that decisions and follow-ups land back in `Voice: <slug>`
+   voice agent that decisions and follow-ups land back in `_rb_voice_<slug>`
    as reminders, optionally prefixed `decision:`, `note:`, `question:`,
    or `done`.
 5. When the user returns, the agent runs `rbridge mailbox read --slug <slug>`

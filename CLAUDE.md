@@ -34,8 +34,8 @@ The project lives inside the parent `python/` monorepo. `git add -A` from here s
 Every poll cycle runs `daemon.sync_once()`, which:
 
 1. Reads the beads-kanban registry (`~/.beads-kanban-projects.json`) via `projects.py`, filtering to directories that have `.beads/`.
-2. Calls `projects_list.sync()` once to refresh the `{prefix}Projects` list (one reminder per project, completed = hidden) and returns the hidden set; then calls `projects_list.apply_hides()` to delete reminders lists for hidden projects and drop their state entries. The daemon iterates only visible projects.
-3. Calls `readme.sync()` once to refresh the `! {prefix}Readme` list (pins `docs/AGENT.md` as a reminder for the iOS/web Claude agent reading inside Reminders). Leading `! ` is intentional — sorts the list first on `reminder_list_search_v0` so cold-start agents find the directive immediately.
+2. Calls `projects_list.sync()` once to refresh the `_rb_beads_projects` list (one reminder per project, completed = hidden) and returns the hidden set; then calls `projects_list.apply_hides()` to delete reminders lists for hidden projects and drop their state entries. The daemon iterates only visible projects.
+3. Calls `readme.sync()` once to refresh the `!_rb_readme` list (pins `docs/AGENT.md` as a reminder for the iOS/web Claude agent reading inside Reminders). Leading `! ` is intentional — sorts the list first on `reminder_list_search_v0` so cold-start agents find the directive immediately.
 4. For each visible project, calls `reconcile_project()`, which:
    - Shells out `bd list --json --all` (`beads.py`).
    - Fetches the matching Reminders list via EventKit (`reminders.py`).
@@ -62,7 +62,7 @@ Agent-control surface exposed and partially wired:
 
 ### Standalone session triggers (no beads coupling)
 
-`triggers.py` owns two lists, `Claude: Sessions` and `Codex: Sessions` (overridable via `RBRIDGE_CLAUDE_LIST` / `RBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
+`triggers.py` owns two lists, `_rb_claude_sessions` and `_rb_codex_sessions` (overridable via `RBRIDGE_CLAUDE_LIST` / `RBRIDGE_CODEX_LIST`). Each unchecked reminder is one pending session request:
 - Title → prompt.
 - Body line `cwd: <path>` (optional, `~` expanded) → working directory; default `$HOME`.
 - Body line `capture: true` (optional) → run in capture mode (see below).
@@ -74,11 +74,11 @@ Three execution modes:
 
 2. **Capture (opt-in via `capture: true`)** — `captures.launch_capture` spawns `claude -p <prompt>` or `codex exec <prompt>` as a background subprocess with stdout piped to `/tmp/rbridge-capture-<reminder>.out`. State lives in `~/.claude/reminders-bridge-captures.json` (override `RBRIDGE_CAPTURE_STATE`). The reminder stays **unchecked** while running. Each daemon cycle calls `captures.poll()`: for any pid that has exited, it reads the tempfile, appends `--- <cmd> output <ts> ---\n<output>` to the reminder body, marks it completed, deletes the tempfile, and records `claude-captured` / `codex-captured` in the activity log. Hard timeout: `RBRIDGE_CAPTURE_TIMEOUT_S` (default 1800s) — at expiry the process group is SIGTERMed and whatever stdout exists is captured anyway. While a reminder is in flight its id is filtered out of `triggers.process_all`'s pending list, so the daemon does not relaunch it. No bead state, no project visibility, no `body.py` involvement.
 
-3. **Chat (opt-in via `chat: true`)** — `sessions.py` owns this path. Each unchecked `Claude: Sessions` reminder with `chat: true` is a persistent conversation. Body holds `cwd: …`, `chat: true`, `session: <uuid>` headers and a transcript of `you:` / `claude (ts):` blocks. `sessions.poll()` (called from `daemon.sync_once` alongside `captures.poll()`) does two things per cycle: reap finished turns (waitpid-aware zombie detection, parse `--output-format json` event array, find the `result` event, append `claude (ts):` block, write `session:` header back); and scan for pending turns — any reminder whose latest text after the last `claude (…):` line is a non-empty `you:` block (or whole body sans headers, for the first turn) launches `claude -p --output-format json [--resume <sid>]`. Reminder stays unchecked across turns; checking it just makes the daemon skip it. Unchecking + appending a new `you:` block resumes the same session id, so close/reopen is transparent. State persists in `~/.claude/reminders-bridge-sessions.json`. `triggers._process_list` skips chat-mode reminders so they never hit Ghostty or capture paths.
+3. **Chat (opt-in via `chat: true`)** — `sessions.py` owns this path. Each unchecked `_rb_claude_sessions` reminder with `chat: true` is a persistent conversation. Body holds `cwd: …`, `chat: true`, `session: <uuid>` headers and a transcript of `you:` / `claude (ts):` blocks. `sessions.poll()` (called from `daemon.sync_once` alongside `captures.poll()`) does two things per cycle: reap finished turns (waitpid-aware zombie detection, parse `--output-format json` event array, find the `result` event, append `claude (ts):` block, write `session:` header back); and scan for pending turns — any reminder whose latest text after the last `claude (…):` line is a non-empty `you:` block (or whole body sans headers, for the first turn) launches `claude -p --output-format json [--resume <sid>]`. Reminder stays unchecked across turns; checking it just makes the daemon skip it. Unchecking + appending a new `you:` block resumes the same session id, so close/reopen is transparent. State persists in `~/.claude/reminders-bridge-sessions.json`. `triggers._process_list` skips chat-mode reminders so they never hit Ghostty or capture paths.
 
 ### Claude tabs lane (live Ghostty mirror, no beads coupling)
 
-`tabs.py` + `tabsbody.py` + `inject.py` + `ghostty.py` + `transcript.py` own a lane (peer to triggers / captures / sessions / mailbox) that mirrors **live Ghostty tabs running Claude Code** into the `Claude: Tabs` list (override `RBRIDGE_TABS_LIST`; deliberately drops the `Beads: ` prefix). `tabs.sync()` runs once per cycle from `daemon.sync_once`. Discovery learned from the `node/claude-activity-watcher` tool.
+`tabs.py` + `tabsbody.py` + `inject.py` + `ghostty.py` + `transcript.py` own a lane (peer to triggers / captures / sessions / mailbox) that mirrors **live Ghostty tabs running Claude Code** into the `_rb_claude_tabs` list (override `RBRIDGE_TABS_LIST`; deliberately drops the `_rb_beads_` prefix). `tabs.sync()` runs once per cycle from `daemon.sync_once`. Discovery learned from the `node/claude-activity-watcher` tool.
 
 - **Discovery** (`ghostty.discover()`): parse `ps -axo pid=,ppid=,tty=,command=`, find the Ghostty root pid(s) (command contains `Ghostty.app/Contents/MacOS/ghostty`), then keep every process whose argv0 basename is `claude`, has a real tty, is not `claude daemon …`, and whose ppid chain reaches a Ghostty root. cwd via `lsof`; one `Tab` per process. **Important:** uses absolute `/bin/ps` and `/usr/sbin/lsof` — under launchd `PATH` is minimal and `lsof` won't resolve by name.
 - **Session resolution** (`transcript.resolve(pid, cwd)`): prefer the authoritative `~/.claude/sessions/<pid>.json` (exact `sessionId`, `cwd`, `status`); fall back to newest `*.jsonl` in `~/.claude/projects/<encoded-cwd>/`. `encode_cwd` replaces `/`, `.`, `_` with `-` (verified against the live dir — dotted segments like `.claude-worktrees` encode to `--claude-...`). The **title** used for matching is the jsonl's last `aiTitle` (Claude's generated tab title), falling back to the session file's `name`. This is the same string Claude paints onto the Ghostty tab.
@@ -110,7 +110,7 @@ Three roles:
 Surface terms:
 - **voice exchange** / **mailbox** — the open conversation, identified by slug.
 - **brief** — handoff doc the project agent composes for the voice agent.
-- **exchange list** — `{voice prefix}<slug>` Reminders list (default `Voice: <slug>`).
+- **exchange list** — `{voice prefix}<slug>` Reminders list (default `_rb_voice_<slug>`).
 - **header / brief / mirror reminder** — daemon-owned reminders.
 - **response** + **response kind** (`decision` / `note` / `question` /
   `deferred` / `done` / `free`) — user-added reminders in the
@@ -123,9 +123,9 @@ Surface terms:
 
 **Surface per exchange** (slug `[a-z0-9][a-z0-9-]{0,47}`):
 - `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list
-  (default `Voice: <slug>`). **Independent of `RBRIDGE_LIST_PREFIX`** —
+  (default `_rb_voice_<slug>`). **Independent of `RBRIDGE_LIST_PREFIX`** —
   the voice flow has no beads coupling, so the list deliberately drops
-  the `Beads: ` namespace. Two daemon-owned reminders:
+  the `_rb_beads_` namespace. Two daemon-owned reminders:
   - `How this list works` (header) — overwritten on drift. Body mirrors
     `mailbox.HEADER_BODY_TEMPLATE`: brief path, the five optional response
     prefixes (`decision:` / `note:` / `question:` / `deferred:` / `done`),
@@ -162,7 +162,7 @@ alarm in Reminders.app themselves — the daemon never overwrites alarms.
 **Defensive boundary**: `projects_list.apply_hides()` skips any list name
 matching `mailbox.is_voice_list_name()` so the project-hide path can never
 delete a voice list, even if a beads project happened to be named
-`Voice: <x>`.
+`_rb_voice_<x>`.
 
 **Activity log events**: `voice-opened`, `voice-response` (currently only
 fires on `done` detection), `voice-closed` (with reason: `user` /
@@ -170,9 +170,10 @@ fires on `done` detection), `voice-closed` (with reason: `user` /
 (file-navigation request served / refused — `navigation.py`).
 
 **New env vars** (full list also in README):
-- `RBRIDGE_VOICE_LIST_PREFIX` (default `Voice: `) — prefix for the voice
-  list name. Final = `{this}{slug}`. Does not combine with
-  `RBRIDGE_LIST_PREFIX`.
+- `RBRIDGE_VOICE_LIST_PREFIX` (default `_rb_voice_`) — prefix for new voice
+  list names. Final = `{this}{slug}`. Does not combine with
+  `RBRIDGE_LIST_PREFIX`. Existing exchanges keep their stored `list_name`
+  and are not auto-renamed.
 - `RBRIDGE_MAILBOX_DIR` (default `~/.claude/voice-mailboxes`).
 - `RBRIDGE_MAILBOX_MIRROR` (default `true`) — set false to disable the
   default-list breadcrumb.
@@ -220,7 +221,7 @@ Other client surface (still not wired):
 
 ### Capture rules (R→B)
 - Skip only if the leading `<token>:` of the title is an **existing bead id** (already managed), if completed (don't capture+immediately close), or if reminder is already linked. A non-id prefix like `Bug:` or `Note:` is *not* a skip — it gets captured as a new bead.
-- Capture lists: only `{RBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`Readme`) or activity log (`Activity`).
+- Capture lists: only `{RBRIDGE_LIST_PREFIX}{project}` lists. Never the info list (`!_rb_readme`) or activity log (`_rb_activity`).
 - Failure mode: `bd create` exception → log warning, skip; reminder stays unprefixed and gets retried next cycle.
 - State persisted right after capture (before the EventKit batch) so a crash between create and rename does not double-create on retry.
 
@@ -242,25 +243,25 @@ Optional prefix `<bb:restored at="ISO">msg</bb:restored>` — present only after
 On tamper (meta / desc diverge from bead, or tags missing), rewrite body from bead state, preserve `<bb:notes>`, prepend the `<bb:restored>` banner. The banner itself is informational, not tamper — the next sync drops it. If notes are unparseable, notes become empty (don't fail).
 
 ### Info list
-`! {prefix}Readme` holds a single reminder titled `Agent context — do not narrate this back` whose body is `docs/AGENT.md` verbatim (the in-Reminders agent directive). Overwritten on drift. Completion is user-owned; `readme.py` does not reset it. Do not store bead data here. Legacy suffixes `__info__`, `CLAUDE.MD READ ME`, `Read me`, `README`, and (now) `Readme` are deleted on startup — see `_LEGACY_SUFFIXES` in `readme.py`. The `Readme` suffix is the unprefixed name from before the sort-first rename; on first sync after upgrade the daemon deletes `{prefix}Readme` and creates `! {prefix}Readme` (no data loss — the body is regenerated from `docs/AGENT.md`).
+`!_rb_readme` (override `RBRIDGE_README_LIST`, default `!_rb_readme`; decoupled from `RBRIDGE_LIST_PREFIX`) holds a single reminder titled `Agent context — do not narrate this back` whose body is `docs/AGENT.md` verbatim (the in-Reminders agent directive). Overwritten on drift. Completion is user-owned; `readme.py` does not reset it. Do not store bead data here. Leading `!` is intentional — sorts the list first. The previous readme list migrates in place via a lossless calendar rename (`migrate.py` + `reminders.rename_list`), so completion state is preserved. Only truly-dead historical names (`Beads: __info__`, `Beads: CLAUDE.MD READ ME`, `Beads: Read me`, `Beads: README`, `Beads: Readme`) are deleted on startup — see `_LEGACY_NAMES` in `readme.py`.
 
 ### Projects list
-`{prefix}Projects` (managed by `projects_list.py`) holds one reminder per registered project. Completed reminder = project is hidden; unchecked = synced normally. Body is overwritten on drift; completion state is user-owned and is the only signal the daemon reads back. Reminders for unknown project names get pruned.
+`_rb_beads_projects` (managed by `projects_list.py`) holds one reminder per registered project. Completed reminder = project is hidden; unchecked = synced normally. Body is overwritten on drift; completion state is user-owned and is the only signal the daemon reads back. Reminders for unknown project names get pruned.
 
-When a project is hidden, `daemon.sync_once` actively deletes its `{prefix}{project}` Reminders list (via `reminders.delete_list`) and drops its entry from the state map. This is destructive: any free-form text inside `<bb:notes>` is lost — bead state itself is unaffected. Unhide → next sync recreates the list and links from beads. The destructive choice is intentional: the goal of hiding is to drop the project from agent context, not just freeze it.
+When a project is hidden, `daemon.sync_once` actively deletes its `_rb_beads_{project}` Reminders list (via `reminders.delete_list`) and drops its entry from the state map. This is destructive: any free-form text inside `<bb:notes>` is lost — bead state itself is unaffected. Unhide → next sync recreates the list and links from beads. The destructive choice is intentional: the goal of hiding is to drop the project from agent context, not just freeze it.
 
 ### Settings list
-`rbridge: Settings` (managed by `settings.py`; override `RBRIDGE_SETTINGS_LIST`) holds one reminder per control. **Renamed from `{prefix}Settings`** — the list is bridge-global, not beads-scoped, so it drops the beads prefix; `sync` deletes the legacy `{prefix}Settings` / `Beads: Settings` list on first run. Title and body are overwritten on drift; unknown reminders are pruned. `settings.sync` returns `{key: value}` (bool or int) consumed in `daemon.sync_once`. Three control kinds (the `kind` field on `Setting`):
-- **toggle** (completed = enabled): `show_completed` — when enabled, closed beads are surfaced as completed reminders in their project list. When disabled (default), closed beads are pruned. Bead state unaffected.
-- **action** (one-shot; completing it fires, `sync` auto-unchecks it the same cycle and reports `True`): `restart` (title `Restart bridge`) — `daemon._apply_controls` sees it and `os.execv(sys.argv[0], sys.argv)` re-execs the daemon in place (reloads code + settings). The auto-uncheck means it never re-fires on restart.
-- **value** (editable int on the body's `value:` line, parsed + clamped, body re-rendered each sync): `poll_ms` (title `Poll interval (ms)`, default 5000, range 100–600000) — `daemon._apply_controls` divides by 1000 and writes the float seconds to `cfg.poll_interval_s` (now a float), which `run()`'s `watcher.wait(...)` reads each loop, so the fallback poll cadence changes live without a restart. Sub-second values are allowed for faster polling, but the effective rate is bounded by sync duration (~seconds) and the event-driven watcher already syncs instantly on Reminders changes.
+`_rb_settings` (managed by `settings.py`; override `RBRIDGE_SETTINGS_LIST`) holds one reminder per control. The list is bridge-global, not beads-scoped, so it drops the beads prefix; any pre-rename settings list (`Beads: Settings` / `rbridge: Settings`) migrates in place via a lossless calendar rename (`migrate.py` + `reminders.rename_list`), preserving configured setting values. Title and body are overwritten on drift; unknown reminders are pruned. `settings.sync` returns `{key: value}` (bool or int) consumed in `daemon.sync_once`. Each control's body is a uniform daemon-owned XML control tag (`<rb:value>` / `<rb:toggle/>` / `<rb:action/>`), re-rendered every sync — self-heals if deleted. Three control kinds (the `kind` field on `Setting`):
+- **toggle** (body `<rb:toggle/>`; completed = enabled): `show_completed` — when enabled, closed beads are surfaced as completed reminders in their project list. When disabled (default), closed beads are pruned. Bead state unaffected.
+- **action** (body `<rb:action/>`; one-shot; completing it fires, `sync` auto-unchecks it the same cycle and reports `True`): `restart` (title `Restart bridge`) — `daemon._apply_controls` sees it and `os.execv(sys.argv[0], sys.argv)` re-execs the daemon in place (reloads code + settings). The auto-uncheck means it never re-fires on restart.
+- **value** (editable int inside the body's `<rb:value min="100" max="600000">5000</rb:value>` tag, parsed + clamped, tag re-rendered each sync — an out-of-range value snaps to the clamp): `poll_ms` (title `Poll interval (ms)`, default 5000, range 100–600000) — `daemon._apply_controls` divides by 1000 and writes the float seconds to `cfg.poll_interval_s` (now a float), which `run()`'s `watcher.wait(...)` reads each loop, so the fallback poll cadence changes live without a restart. Sub-second values are allowed for faster polling, but the effective rate is bounded by sync duration (~seconds) and the event-driven watcher already syncs instantly on Reminders changes.
 
 Add a control by appending a `Setting(key, title, body, kind=…, …)` to `SETTINGS` and reading the returned value in `daemon.sync_once`.
 
 When `show_completed=False`, `reconcile_project` short-circuits closed beads at the top of the issue loop: it deletes any linked reminder, drops the link, and skips create logic. When `True`, closed beads are syncable, and creates pre-set the EventKit `completed` flag so the new reminder lands already checked.
 
 ### Activity log
-`{prefix}Activity` holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden / `claude-turn` / `claude-error` from chat sessions). Backed by `~/.claude/reminders-bridge-activity.jsonl` (override `RBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. Legacy suffix `__log__` is deleted on startup (see `_LEGACY_SUFFIXES` in `activity.py`).
+`_rb_activity` (override `RBRIDGE_ACTIVITY_LIST`, default `_rb_activity`; decoupled from `RBRIDGE_LIST_PREFIX`) holds one rolling reminder `Recent activity` with the last ~200 events (created / closed / reopened / captured / restored / pruned / status change / hidden / `claude-turn` / `claude-error` from chat sessions). Backed by `~/.claude/reminders-bridge-activity.jsonl` (override `RBRIDGE_ACTIVITY`). Daemon-owned, not user-editable — drift is overwritten next sync. The previous activity list migrates in place via a lossless calendar rename; only the truly-dead historical name `Beads: __log__` is deleted on startup (see `_LEGACY_NAMES` in `activity.py`).
 
 ### Lint
 `rbridge lint` is read-only. Codes: `missing-meta`, `missing-desc`, `missing-notes`, `bad-status`, `drift`, orphan. The daemon does not fail-stop on lint issues; it rewrites on the next sync.
@@ -270,7 +271,7 @@ When `show_completed=False`, `reconcile_project` short-circuits closed beads at 
 - Sync directions are fixed: B→R for fields, R→B for completion (`bd close`), uncomplete (`bd reopen`), and capture (`bd create`). Do not add more without explicit approval.
 - Do not parse `<bb:notes>` for structured data; it is free-form user text.
 - Do not touch reminders outside `{RBRIDGE_LIST_PREFIX}{project}` lists.
-- iOS Claude / external agents: write into `Beads: <project>` lists for capture, never into `Readme` or `Activity` (drift gets overwritten silently).
+- iOS Claude / external agents: write into `_rb_beads_<project>` lists for capture, never into `!_rb_readme` or `_rb_activity` (drift gets overwritten silently).
 - Do not add new `<bb:*>` tags without updating `body.py` parser, lint codes, and this doc together.
 - New bead status values: add to `VALID_STATUSES` in `body.py` and the README env-var section.
 - Keep modules under ~150 lines. `body.py` owns all body concerns; `readme.py` owns the info list.
