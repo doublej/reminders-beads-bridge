@@ -373,11 +373,36 @@ def _gc_legacy_lists() -> None:
             log.warning("legacy GC failed for %s: %s", name, e)
 
 
+def _migrate_list_names() -> None:
+    """Rename voice lists still on a pre-``_rb_`` name to the current prefix.
+
+    Lossless: renames the calendar (preserving the brief, header, and the
+    user's response reminders) and rewrites the stored ``list_name``. Once
+    every state file is canonical this is a no-op, so it is safe per cycle.
+    """
+    for mb in list_active():
+        canonical = list_name_for(mb.slug)
+        if mb.list_name == canonical:
+            continue
+        try:
+            reminders_module.rename_list(mb.list_name, canonical)
+        except RuntimeError as e:
+            log.warning("voice list rename failed for %s: %s", mb.slug, e)
+            continue
+        mb.list_name = canonical
+        _save(mb)
+        log.info("migrated voice list -> %s", canonical)
+
+
 def sync() -> None:
     try:
         _gc_legacy_lists()
     except Exception as e:
         log.warning("legacy voice-list GC failed: %s", e)
+    try:
+        _migrate_list_names()
+    except Exception as e:
+        log.warning("voice-list name migration failed: %s", e)
     for mb in list_active():
         try:
             _sync_one(mb)
