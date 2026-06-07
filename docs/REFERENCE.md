@@ -84,8 +84,9 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_CAPTURE_TIMEOUT_S` | `1800` | Hard timeout per capture session. |
 | `RBRIDGE_SESSIONS_TIMEOUT_S` | `900` | Hard timeout per chat-mode turn. |
 | `RBRIDGE_TABS_LIST` | `_rb_claude_tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
+| `RBRIDGE_CAPTURE_STATE` | `~/.claude/reminders-bridge-captures.json` | Capture-mode session state (pid, tempfile, list). |
+| `RBRIDGE_SESSIONS_STATE` | `~/.claude/reminders-bridge-sessions.json` | Chat-mode turn state (pid, session id, reminder). |
 | `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, sent log, last error). |
-| `RBRIDGE_TABS_TAIL_MSGS` | `6` | Number of recent messages shown in the live transcript tail. |
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
@@ -207,7 +208,7 @@ Title resolution + session id come from `~/.claude/sessions/<pid>.json` (authori
 - Title: `{aiTitle or project} · {tty}`.
 - Body (daemon-owned, overwritten on drift):
   - Header: `tab` (title), `project` + `status` (idle/busy/shell), `cwd`, `tty` / `pid` / `mode`, `session`.
-  - `transcript (live · read-only)` — the last `RBRIDGE_TABS_TAIL_MSGS` (default 6) messages from the session jsonl, refreshed every cycle.
+  - `transcript (live · read-only)` — the last 6 messages from the session jsonl (hardcoded in `transcript.render_tail`), refreshed every cycle.
   - `sent` — log of messages typed into the tab.
   - `send:` — the only region read back from the user.
 

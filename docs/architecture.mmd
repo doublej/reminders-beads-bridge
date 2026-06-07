@@ -21,17 +21,17 @@ graph TB
         WATCHER["watcher.py<br/>install observer<br/>wait(max_s)<br/>0.6s settle + 0.4s debounce"]
         SYNC["daemon.sync_once<br/>per-cycle entry"]
         subgraph beads_path["Beads sync path"]
-            MASTER["master.sync<br/>Beads: Projects<br/>checked = hidden"]
-            SETTINGS["settings.sync<br/>Beads: Settings<br/>show_completed toggle"]
-            META["meta.sync<br/>Beads: Readme"]
-            ACTIVITY["activity.sync<br/>Beads: Activity<br/>~200 events"]
+            MASTER["projects_list.sync<br/>_rb_beads_projects<br/>checked = hidden"]
+            SETTINGS["settings.sync<br/>_rb_settings<br/>show_completed toggle"]
+            META["readme.sync<br/>!_rb_readme"]
+            ACTIVITY["activity.sync<br/>_rb_activity<br/>~200 events"]
             RECONCILE["reconcile_project<br/>per visible project"]
             BODY["body.compose / parse<br/>bb:meta · bb:desc · bb:notes<br/>bb:restored banner"]
             MARKERS["body.consume_agent_markers<br/>!agent only"]
             BEADS_API["api.py + events.py<br/>(plumbing)"]
         end
         subgraph trigger_path["Standalone session triggers<br/>(no beads coupling)"]
-            TRIGGERS["triggers.process_all<br/>scans Claude/Codex Sessions<br/>parse_request → cwd + prompt"]
+            TRIGGERS["triggers.process_all<br/>scans _rb_claude/codex_sessions<br/>parse_request → cwd + prompt"]
         end
         LAUNCH["launch.py<br/>Ghostty -e claude|codex<br/>--working-directory"]
         STATE[("state.json<br/>bead-id ↔ reminder-id")]
@@ -39,16 +39,16 @@ graph TB
     end
 
     %% Reserved control lists
-    subgraph beads_lists["Beads-prefixed lists"]
-        L_PROJ["Beads: Projects"]
-        L_SET["Beads: Settings"]
-        L_DOC["Beads: Readme"]
-        L_LOG["Beads: Activity"]
-        L_PRJ["Beads: &lt;project&gt;<br/>(one per active project)"]
+    subgraph beads_lists["_rb_ lists"]
+        L_PROJ["_rb_beads_projects"]
+        L_SET["_rb_settings"]
+        L_DOC["!_rb_readme"]
+        L_LOG["_rb_activity"]
+        L_PRJ["_rb_beads_&lt;project&gt;<br/>(one per active project)"]
     end
     subgraph trigger_lists["Trigger lists (independent)"]
-        L_CLAUDE["Claude: Sessions"]
-        L_CODEX["Codex: Sessions"]
+        L_CLAUDE["_rb_claude_sessions"]
+        L_CODEX["_rb_codex_sessions"]
     end
 
     %% Data flow: bead → reminder
@@ -86,7 +86,7 @@ graph TB
 
     %% Hide/show
     L_PROJ -- "checked = hide" --> MASTER
-    MASTER -- "delete_list(Beads: project)" --> EK
+    MASTER -- "delete_list(_rb_beads_&lt;project&gt;)" --> EK
 
     %% Markers (beads side: agent only)
     L_PRJ -- "&lt;bb:notes&gt; !agent" --> MARKERS
