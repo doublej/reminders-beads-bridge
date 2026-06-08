@@ -5,8 +5,17 @@ current conversation into a voice-ready **brief** for a **voice agent** (Claude
 Voice in practice) the user will talk to, and — when you need answers back —
 open a Reminders **mailbox** you drain afterward.
 
-This primer is the complete playbook. Everything you need is here; you do not
-need a skill or any other doc. Read it, then act.
+This primer is the complete playbook for *authoring* — composing the brief and
+opening the mailbox. Read it, then act.
+
+**Two surfaces, two readers — don't confuse them.** This primer is read only by
+you, the project agent. The **voice agent never reads it.** The voice agent
+reads (a) the **brief** you compose, and (b) its own standing directive
+`!_rb_readme` (`docs/AGENT.md`), which already covers the `fetch:`/`grep:`/`tree:`
+mechanics. So you cannot change the voice agent's behavior by writing it here —
+to steer it, put the instruction in the brief, or rely on what `!_rb_readme`
+already says. Everything below is *authoring* guidance: what to put in the
+brief, not commands to the voice agent.
 
 ---
 
@@ -57,10 +66,11 @@ let an identifier cross between them through transcription.** In practice:
   plus a plain-English name — and pair it with the exact path in the brief's
   (non-spoken) map: "File 3, the mailbox module" ↔
   `src/reminders_bridge/mailbox.py`.
-- The voice agent **translates** the user's fuzzy spoken reference into the
-  exact string *from the brief* and writes *that* — never the user's
-  pronunciation — into a `fetch:`/`grep:`/`tree:` reminder. The user dictates
-  intent ("pull up the mailbox one"); the agent supplies the bytes.
+- The map is what lets the voice agent translate the user's fuzzy speech ("pull
+  up the mailbox one") into an exact path when it forms a `fetch:` request — its
+  own directive (`!_rb_readme`), not this primer, tells it to do that. **Your**
+  job is upstream: ship the map so the exact paths exist for it to use. You
+  cannot instruct the voice agent from here.
 
 ---
 
@@ -253,12 +263,13 @@ blocked request (escapes the root, binary file, not found) becomes
 `RBRIDGE_NAV_GREP_HITS` (50), `RBRIDGE_NAV_TREE_ENTRIES` (200),
 `RBRIDGE_NAV_TREE_DEPTH` (2). Disable globally with `RBRIDGE_VOICE_NAV=0`.
 
-**Transcription caveat (read *Speech is lossy* above).** `fetch:` matches an
-**exact** relative path under the root — one mangled character fails. So take
-the path from the brief's map, never from the user's spoken words. When you
-only have a fuzzy spoken reference and no brief handle, prefer
-`grep: <distinctive token>` — grep is case-insensitive and matches substrings,
-so it survives transcription drift where an exact path won't.
+**Transcription caveat.** `fetch:` matches an **exact** relative path under the
+root — one mangled character fails, and a spoken path never survives
+transcription (no underscores; dots/dashes/casing drift). The runtime rule —
+use the exact path from the brief's map, not the user's pronunciation; fall
+back to `grep:` for fuzzy refs — is the **voice agent's**, and lives in its
+`!_rb_readme` directive (already updated). From here your job is upstream: build
+that map (see *Speech is lossy*) so the exact paths exist for it to use.
 
 **For nav to work the mailbox must have a real root.** `rbridge doctor` shows
 `nav=on root=<path>` per mailbox; `nav=off root=—` means file requests are
