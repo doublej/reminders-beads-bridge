@@ -221,7 +221,39 @@ good-vs-bad examples.
   stdout echoes the exact `read` and `close` commands — include them verbatim in
   your reply.
 
-### 5. Drain, after the exchange
+### 5. Kick-start the voice agent (optional)
+
+Hand the user a short **kick-start**: a paste-ready first message to the voice
+agent that boots the conversation without a cold start. The user can paste it
+into their voice/chat session to begin, or ignore it and start their own way.
+
+Shape:
+- Written in the **user's** voice — "I" = the user, "you" = the voice agent. It
+  is the user's opening turn, composed on their behalf (not the third-person POV
+  of the brief).
+- 2–4 sentences: name the voice agent's role for this exchange, the topic in one
+  breath, where the full brief lives, and one concrete opener so the voice agent
+  *leads*. End by giving it the floor.
+- Point to the brief by its exact location — REMINDERS: the `_rb_voice_<slug>`
+  list; CLAUDE_VOICE: the brief is on the clipboard, so say "the brief I'm
+  pasting" (or paste it under the kick-start).
+- This is a **written** channel (pasted, not spoken), so exact identifiers
+  (slug, list name, paths) are fine here — the *Speech is lossy* rule does **not**
+  apply to the kick-start.
+
+Surface it as a fenced, paste-ready block in your reply. Don't `pbcopy` it — that
+would clobber the brief on the clipboard (CLAUDE_VOICE).
+
+Example (REMINDERS, wallgen):
+```
+You're my sounding board for a quick walk — be the voice agent for this one.
+We're deciding the wallgen catalog restructure; the full brief is in the
+Reminders list _rb_voice_wallgen-catalog. The hot call is whether to migrate the
+bosdieren-collage Shopify handles or keep the legacy slug. Lay out that tradeoff,
+push me on it, and kick us off — where do you want to start?
+```
+
+### 6. Drain, after the exchange
 
 ```bash
 rbridge mailbox read --slug <slug>
@@ -232,7 +264,7 @@ is `decision` / `note` / `question` / `deferred` / `done` / `free`. Treat
 `deferred` as an open question to re-raise next session, not a resolved item.
 Header / brief / nav reminders are filtered out automatically.
 
-### 6. Close
+### 7. Close
 
 ```bash
 rbridge mailbox close --slug <slug>

@@ -93,6 +93,7 @@ Surface terms:
 | **file navigation** / **nav** | pulling repo content via `fetch:` / `grep:` / `tree:` reminders |
 | **source_cwd** | the mailbox's repo root; nav serves files under it (empty ⇒ nav off) |
 | **map** | the speakable-handle ↔ exact-path index the project agent puts in the brief |
+| **kick-start** | a short paste-ready first message the project agent composes (in the user's voice) to boot the voice agent and open the exchange; optional |
 
 Nav verbs rewrite in place: `fetch:`→`file:`, `grep:`→`results:`, `tree:`→`listing:`, refused→`blocked:`.
 
