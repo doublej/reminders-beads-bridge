@@ -12,6 +12,7 @@ from . import config as config_module
 from . import daemon as daemon_module
 from . import mailbox as mailbox_module
 from . import navigation as navigation_module
+from . import prime as prime_module
 from . import projects_list as projects_list_module
 from . import projects as projects_module
 from . import reminders as reminders_module
@@ -20,7 +21,7 @@ from . import state as state_module
 from . import tabs as tabs_module
 
 
-USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe|mailbox|tabs]"
+USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe|mailbox|tabs|prime]"
 
 
 def main() -> None:
@@ -42,6 +43,8 @@ def main() -> None:
         mailbox_cli(sys.argv[2:])
     elif cmd == "tabs":
         tabs()
+    elif cmd == "prime":
+        prime_module.run(sys.argv[2:])
     else:
         print(USAGE)
         sys.exit(1)
