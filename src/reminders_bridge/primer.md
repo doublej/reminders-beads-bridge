@@ -30,6 +30,40 @@ list access.
 
 ---
 
+## Speech is lossy for identifiers — keep them out of the spoken channel
+
+Voice corrupts machine identifiers in **both** directions, and you must design
+around it:
+
+- **Text-to-speech** (the voice agent reading aloud) turns `_rb_voice_x`,
+  `src/foo/bar.py`, `open_mailbox`, `claude-md` into "underscore r b
+  underscore…", "slash … slash … dot pie", a letter-mash, or "claude dash em
+  dee" — noise the user can't follow.
+- **Speech-to-text** (the user talking, or dictating a reminder) is worse and
+  silent: it **never** emits underscores; renders dots, dashes, and casing
+  unreliably ("claude md" not `claude-md`, "config dot pie" or "config py");
+  splits `snake_case`/`camelCase` into plain words; and mangles domain proper
+  nouns (houwening, bosdieren, pimpelmees, wallgen). A **dictated path is
+  effectively destroyed.**
+
+**The rule: the spoken channel carries meaning; the written channel (this
+brief, and any reminder text an agent writes) carries exact identifiers. Never
+let an identifier cross between them through transcription.** In practice:
+
+- In spoken prose, never write a raw identifier — spell it as words ("the
+  mailbox module", "the claude-em-dee files", "the underscore-r-b voice list").
+  Covers filenames, paths, slugs, list names, function names, env vars.
+- Give every file/item the user might pull a **speakable handle** — a number
+  plus a plain-English name — and pair it with the exact path in the brief's
+  (non-spoken) map: "File 3, the mailbox module" ↔
+  `src/reminders_bridge/mailbox.py`.
+- The voice agent **translates** the user's fuzzy spoken reference into the
+  exact string *from the brief* and writes *that* — never the user's
+  pronunciation — into a `fetch:`/`grep:`/`tree:` reminder. The user dictates
+  intent ("pull up the mailbox one"); the agent supplies the bytes.
+
+---
+
 ## Vocabulary (matches the bridge — use these exact terms)
 
 Three roles:
@@ -219,6 +253,13 @@ blocked request (escapes the root, binary file, not found) becomes
 `RBRIDGE_NAV_GREP_HITS` (50), `RBRIDGE_NAV_TREE_ENTRIES` (200),
 `RBRIDGE_NAV_TREE_DEPTH` (2). Disable globally with `RBRIDGE_VOICE_NAV=0`.
 
+**Transcription caveat (read *Speech is lossy* above).** `fetch:` matches an
+**exact** relative path under the root — one mangled character fails. So take
+the path from the brief's map, never from the user's spoken words. When you
+only have a fuzzy spoken reference and no brief handle, prefer
+`grep: <distinctive token>` — grep is case-insensitive and matches substrings,
+so it survives transcription drift where an exact path won't.
+
 **For nav to work the mailbox must have a real root.** `rbridge doctor` shows
 `nav=on root=<path>` per mailbox; `nav=off root=—` means file requests are
 silently ignored — re-open with `--cwd <repo>` to fix.
@@ -227,9 +268,11 @@ silently ignored — re-open with `--cwd <repo>` to fix.
 
 ## Brief templates
 
-All three share the POV and the **hard rules**: no filenames in shell form
-(spell them out — "the resolver module", not `resolver.ts`); no invented detail
-or bluffing (every proper noun traces to the transcript or a tool call you ran);
+All three share the POV and the **hard rules**: no raw identifiers in spoken
+prose — spell filenames, paths, slugs, list names, and symbols out as words
+("the resolver module", not `resolver.ts`); see *Speech is lossy* above; no
+invented detail or bluffing (every proper noun traces to the transcript or a
+tool call you ran);
 name the gaps you couldn't reach rather than paper over them. The Location
 header is the only exception (raw paths fine).
 
@@ -300,9 +343,11 @@ Append this, `<slug>` filled in and the example prefix lines rewritten to fit
 the actual topic (keep the shape; only the example phrases change):
 
 ```
-Decisions and follow-ups that should reach the project agent land in a
-Reminders list named "underscore r b underscore voice underscore <slug>".
-Each item is one reminder in that list. Title shapes:
+Decisions and follow-ups that should reach the project agent go in the voice
+list I opened for this exchange — the user adds them in Reminders (no need to
+say or spell the list's name; it is the one tied to this topic, and a
+breadcrumb reminder "Voice exchange open: <slug>" points at it). Each item is
+one reminder. Title shapes:
 
   "Decision colon <a concrete call from this brief>" — committed calls.
   "Note colon <an observation that fits this topic>" — context worth keeping.
