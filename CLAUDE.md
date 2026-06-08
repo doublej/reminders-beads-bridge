@@ -16,6 +16,7 @@ uv run rbridge sync      # one-shot reconcile (safe, idempotent)
 uv run rbridge run       # foreground poll loop
 uv run rbridge status    # registry + link counts per project
 uv run rbridge lint      # diagnose drift, orphans, missing tags
+uv run rbridge prime     # emit the voice-takeout playbook (--json for the contract)
 ```
 
 Daemon runs under launchd. After editing any module, reload:
@@ -90,12 +91,14 @@ Three execution modes:
 
 `mailbox.py` + `mirror.py` own a third standalone lane (peer to triggers /
 captures / sessions): one free-floating Reminders list per open agent ↔
-user voice exchange. Driven by the `/voice-chat-takeout` skill from any
-Claude Code session — no beads coupling, no project registry lookup.
+user voice exchange. Driven by `rbridge prime` — the self-describing
+voice-takeout playbook — from any Claude Code session. No beads coupling,
+no project registry lookup, no skill (the former `/voice-chat-takeout`
+skill was folded into the CLI; see `src/reminders_bridge/primer.md`).
 
-**Vocabulary** (canonical table in `README.md` → "Voice exchange mailboxes" →
-"Vocabulary"; keep usage consistent across this file, `docs/AGENT.md`, the
-skill `~/.claude/skills/voice-chat-takeout/`, and the
+**Vocabulary** (canonical table in `docs/REFERENCE.md` → "Voice exchange
+mailboxes"; keep usage consistent across this file, `docs/AGENT.md`,
+`src/reminders_bridge/primer.md` (emitted by `rbridge prime`), and the
 `/voice-deep-takeout` command):
 
 Three roles:
@@ -118,8 +121,9 @@ Surface terms:
   decision yet, revisit later).
 - **writeback contract** — REMINDERS-brief block naming the list + prefixes.
 - **drain** — the project agent reads responses via `rbridge mailbox read`.
-- **takeout** — user-facing skill: `/voice-chat-takeout` (mailbox flow) or
-  `/voice-deep-takeout` (deep paste-into-voice flow).
+- **takeout** — the voice-takeout flow. The mailbox flow is driven by
+  `rbridge prime` (no skill); `/voice-deep-takeout` remains for the deep
+  paste-into-voice flow.
 
 **Surface per exchange** (slug `[a-z0-9][a-z0-9-]{0,47}`):
 - `{RBRIDGE_VOICE_LIST_PREFIX}<slug>` Reminders list

@@ -267,7 +267,7 @@ commits — keep the cross-surface vocabulary consistent.
 | **writeback contract** | Section of the REMINDERS-flavor brief that names the exchange list and the response prefixes. |
 | **drain** | The act of the agent reading user responses via `rbridge mailbox read --slug <slug>`. |
 | **open / close / refresh** | Lifecycle verbs. `rbridge mailbox open` creates, `close` tears down, `refresh` re-ups reminders without changing the brief. |
-| **takeout** | The user-facing skill that composes a brief — `/voice-chat-takeout` (mailbox flow, default) or `/voice-deep-takeout` (deep paste-into-voice flow with structured return template, no mailbox). |
+| **takeout** | Composing a brief and opening a mailbox. The mailbox flow is driven by `rbridge prime` (the self-describing playbook in `src/reminders_bridge/primer.md`; no skill). `/voice-deep-takeout` remains for the deep paste-into-voice flow with a structured return template (no mailbox). |
 | **file navigation** | The pull lane: the voice agent requests repo content via `fetch:` / `grep:` / `tree:` reminders and the daemon serves them in place. Sandboxed to the mailbox root; auto-enabled when the mailbox has a root. |
 | **request / served / blocked** | A nav request reminder (`fetch:` / `grep:` / `tree:`), its in-place result (`file:` / `results:` / `listing:`), or a refusal (`blocked:`). All excluded from `drain`. |
 
@@ -279,13 +279,13 @@ Activity log events use the same vocabulary: `voice-opened`,
 
 The intended flow is:
 
-1. The project agent invokes the `/voice-chat-takeout --mailbox=<slug>`
-   skill from a Claude Code session. The skill first runs a
-   context-gathering pre-flight (Read referenced files, grep symbols,
-   inspect git, capture error strings) — the brief has to be grounded
-   in evidence, not paraphrased recall. It then composes a TTS-friendly
-   brief, saves it under `~/.claude/voice-mailboxes/<slug>.brief.md`,
-   and pipes it into `rbridge mailbox open`.
+1. The project agent runs `rbridge prime` from a Claude Code session to
+   load the playbook, then follows it: first a context-gathering
+   pre-flight (Read referenced files, grep symbols, inspect git, capture
+   error strings) — the brief has to be grounded in evidence, not
+   paraphrased recall — then composes a TTS-friendly brief, saves it
+   under `~/.claude/voice-takeouts/<ts>-<slug>.md`, and pipes it into
+   `rbridge mailbox open --cwd "$PWD"`.
 2. The bridge creates `_rb_voice_<slug>` with two daemon-owned reminders:
    a header (how the list works, prefix conventions, the read command) and
    the brief itself. Both are flagged high priority.
