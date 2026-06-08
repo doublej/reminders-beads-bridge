@@ -210,6 +210,12 @@ def open_mailbox(
         mb.kind = kind or mb.kind
         if source_cwd:
             mb.source_cwd = source_cwd
+        elif not mb.source_cwd:
+            # Self-heal: a mailbox created by an older build (or any caller
+            # that passed no cwd) has an empty root, which silently disables
+            # file-navigation. Backfill from the process cwd so a plain
+            # re-open repairs it. cf. navigation._root() returning None.
+            mb.source_cwd = os.getcwd()
     else:
         mb = Mailbox(
             slug=slug,
@@ -219,7 +225,7 @@ def open_mailbox(
                 timespec="seconds"
             ),
             kind=kind,
-            source_cwd=source_cwd,
+            source_cwd=source_cwd or os.getcwd(),
         )
     _save(mb)
     _rewrite_reminders(mb, brief_text)
