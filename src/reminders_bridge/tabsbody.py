@@ -3,7 +3,9 @@
 Isolates all reminder-body string concerns (peer to `body.py` for beads).
 The body is daemon-owned and overwritten each cycle; the only thing read back
 is the free text under `send:`. A non-empty `send:` payload is typed into the
-live tab when the reminder is completed.
+live tab when the reminder is completed — payload + completion must land in the
+same write, since the daemon reads both from one polled snapshot and unchecks a
+completed reminder every cycle.
 """
 
 import re
@@ -13,9 +15,11 @@ from . import transcript as transcript_module
 
 _SEND_RE = re.compile(r"(?mi)^[ \t]*send:[ \t]*")
 _HELP = (
-    "Write your message under `send:`, then mark this reminder complete to send "
-    "it. Completing the reminder is the send action. The bridge switches Ghostty "
-    "to this tab and types the message into the live session. "
+    "SEND = write under `send:` AND complete this reminder in one action — the "
+    "completion is the trigger. Agents: set the text and `completed: true` in a "
+    "single update; completing first sends empty. STAGE = write under `send:` and "
+    "leave it unchecked (just a draft). On send the bridge switches Ghostty to "
+    "this tab and types the message in. "
     "(Needs the tab on the active Space + Accessibility permission for the bridge.)"
 )
 
