@@ -38,7 +38,7 @@ def host() -> str:
 
 
 def port() -> int:
-    return int(os.getenv("RBRIDGE_DASHBOARD_PORT", "8765"))
+    return int(os.getenv("RBRIDGE_DASHBOARD_PORT", "47900"))
 
 
 def _window_s() -> int:

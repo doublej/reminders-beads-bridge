@@ -76,7 +76,7 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_ACTIVITY_LIST` | `_rb_activity` | Name of the rolling activity-log list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_DASHBOARD_LIST` | `_rb_dashboard` | Name of the list holding the dashboard URL reminder (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_DASHBOARD_HOST` | `127.0.0.1` | Bind/advertise host for `rbridge serve`. Keep loopback-only unless you know what you're doing. |
-| `RBRIDGE_DASHBOARD_PORT` | `8765` | Port for `rbridge serve` and the advertised URL. |
+| `RBRIDGE_DASHBOARD_PORT` | `47900` | Port for `rbridge serve` and the advertised URL. |
 | `RBRIDGE_DASHBOARD_WINDOW_S` | `900` | Token rotation window (seconds, min 60). `serve` accepts the current + previous window. |
 | `RBRIDGE_DASHBOARD_SECRET` | (none) | Shared HMAC secret. If unset, a random one is generated and persisted to the secret file. |
 | `RBRIDGE_DASHBOARD_SECRET_FILE` | `~/.claude/reminders-bridge-dashboard-secret` | Where the generated secret is stored (mode 0600). Both the daemon and `serve` read it. |
@@ -244,7 +244,7 @@ call; `curl` works too. The page is the cleanest entry point: point an agent at
 the `_rb_dashboard` reminder, it fetches the URL, and gets the full picture.
 
 **Run it.** `rbridge serve` (separate process from the daemon — bind it under
-your own launchd job, or run on demand). It binds `127.0.0.1:8765` by default.
+your own launchd job, or run on demand). It binds `127.0.0.1:47900` by default.
 The endpoint is **read-only**; all writes still go through rbridge / the daemon
 (EventKit stays single-owner, so `serve` never touches Reminders — it reads the
 registry, `state.json`, `bd list`, and the activity log directly).
