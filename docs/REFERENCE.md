@@ -75,7 +75,8 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_README_LIST` | `!_rb_readme` | Name of the pinned agent-context (Readme) list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_ACTIVITY_LIST` | `_rb_activity` | Name of the rolling activity-log list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_DASHBOARD_LIST` | `_rb_dashboard` | Name of the list holding the dashboard URL reminder (independent of `RBRIDGE_LIST_PREFIX`). |
-| `RBRIDGE_DASHBOARD_HOST` | `127.0.0.1` | Bind/advertise host for `rbridge serve`. Keep loopback-only unless you know what you're doing. |
+| `RBRIDGE_DASHBOARD_HOST` | `127.0.0.1` | Bind host for `rbridge serve`. Loopback by default; set `0.0.0.0` to accept connections from a reverse proxy. |
+| `RBRIDGE_DASHBOARD_PUBLIC_URL` | (none) | Origin advertised in the `_rb_dashboard` reminder (e.g. `https://rbridge.jurrejan.com`). Defaults to the bind address. Set when behind a reverse proxy. |
 | `RBRIDGE_DASHBOARD_PORT` | `47900` | Port for `rbridge serve` and the advertised URL. |
 | `RBRIDGE_DASHBOARD_WINDOW_S` | `900` | Token rotation window (seconds, min 60). `serve` accepts the current + previous window. |
 | `RBRIDGE_DASHBOARD_SECRET` | (none) | Shared HMAC secret. If unset, a random one is generated and persisted to the secret file. |
@@ -243,16 +244,34 @@ in one request instead of reading many lists.
 call; `curl` works too. The page is the cleanest entry point: point an agent at
 the `_rb_dashboard` reminder, it fetches the URL, and gets the full picture.
 
-**Run it.** `rbridge serve` (separate process from the daemon — bind it under
-your own launchd job, or run on demand). It binds `127.0.0.1:47900` by default.
-The endpoint is **read-only**; all writes still go through rbridge / the daemon
-(EventKit stays single-owner, so `serve` never touches Reminders — it reads the
-registry, `state.json`, `bd list`, and the activity log directly).
+**Activate it through the bridge.** The daemon owns the `serve` subprocess — the
+`Dashboard server` toggle in `_rb_settings` starts/stops it (`serverctl.ensure`
+each cycle: spawn when on, reap when off, respawn if it died, adopt an
+already-bound port instead of crash-looping). Any agent — including the voice
+agent inside Reminders — activates it by checking that reminder; `restart` reaps
+the child first so the new daemon re-binds cleanly. `rbridge serve` also runs it
+standalone for local testing. Binds `127.0.0.1:47900` by default.
 
-**Routes** (all on `/`):
-- `GET /?t=<token>` → minimal HTML.
-- `GET /?t=<token>&format=json` → the same snapshot as JSON.
-- Missing/expired token → `403`; any other path → `404`.
+The endpoint is **read-only**; all writes go through rbridge / the daemon. The
+daemon stays the only EventKit *writer*; `serve` reads files / `bd` / `ps`, plus
+a read-only EventKit pass for the sessions lane (the same thing `status`/`lint`
+do from a one-shot process).
+
+**Output.** Compact markdown by default — the primary reader is an agent
+fetching the URL, so it's dense and chrome-free. `&format=json` returns the same
+data structured. Drill-down is path-based; the token is stated once and appended
+as `?t=<token>`:
+
+| Path | Shows |
+|------|-------|
+| `/` | overview: totals (projects, beads by status, pending sessions, live tabs, voice) + per-project rows + recent activity |
+| `/project/<name>` | full bead list for one project (id · priority · status · type · linked · title) |
+| `/sessions` | Claude + Codex session reminders (engine · state · mode · title) |
+| `/tabs` | live Ghostty Claude tabs (pid · tty · mode · session · title) |
+| `/voice` | active voice exchange mailboxes |
+| `/activity` | full ~200-event activity log |
+
+Missing/expired token → `403`; unknown path → `404`.
 
 **Auth.** The token is a time-windowed HMAC of a shared secret
 (`RBRIDGE_DASHBOARD_SECRET`, else a generated `…-secret` file). It rotates every

@@ -82,7 +82,7 @@ Load-bearing invariants:
 - **claude tabs** (`tabs.py`, `tabsbody.py`, `ghostty.py`, `transcript.py`, `inject.py`) — mirror live Ghostty Claude tabs into `_rb_claude_tabs`; `send:` text + completion in **one** write types into the live tab (completion is the trigger; GUI inject, needs Accessibility). See `docs/REFERENCE.md` → "Claude tabs".
 - **voice mailboxes** (`mailbox.py`, `mirror.py`, `navigation.py`, `sandbox.py`, `prime.py`, `primer.md`) — one `_rb_voice_<slug>` list per exchange; file-nav serves `fetch:`/`grep:`/`tree:`. Authoring playbook = `rbridge prime` (`primer.md`); voice-agent directive = `docs/AGENT.md`; vocabulary + flow = `docs/REFERENCE.md`; editing rules = `.claude/rules/voice-surfaces.md`.
 - **controls** (`settings.py`, `projects_list.py`, `readme.py`, `activity.py`, `dashboard.py`) — the daemon-owned `_rb_settings` / `_rb_beads_projects` / `!_rb_readme` / `_rb_activity` / `_rb_dashboard` lists (Sync rules below).
-- **dashboard endpoint** (`snapshot.py`, `server.py`, `dashboard.py`) — read-only HTTP at-a-glance view via `rbridge serve` (separate process). `snapshot.py` builds the view from disk (no EventKit); `dashboard.py` mints a rotating token + surfaces the live URL in `_rb_dashboard`. Writes stay in rbridge. See `docs/REFERENCE.md` → "Dashboard endpoint".
+- **dashboard endpoint** (`snapshot.py`, `dashpages.py`, `server.py`, `dashboard.py`, `serverctl.py`) — read-only HTTP at-a-glance view + drill-down (`/`, `/project/<name>`, `/sessions`, `/tabs`, `/voice`, `/activity`), compact markdown or `?format=json`. `snapshot.py` assembles each view (files/`bd`/`ps` + read-only EventKit for sessions); `dashpages.py` renders markdown; `server.py` routes; `dashboard.py` mints the rotating token + surfaces the live URL in `_rb_dashboard`; `serverctl.py` is the daemon-owned `serve` subprocess, toggled by the `Dashboard server` setting. Read-only — writes stay in rbridge. See `docs/REFERENCE.md` → "Dashboard endpoint".
 - **agent dispatch** (`agent_marker.py`) — `!agent` in `<bb:notes>` → enqueue a coding session; rewritten to `<bb:agent …/>`.
 
 ## Sync rules (the editing contract)
@@ -130,8 +130,10 @@ exactly `{bead-id}: {bead-title}`. Editing `body.py` → see
   project from agent context. Unhide → recreated next sync.
 - **`_rb_settings`** — one reminder per control; body is a daemon-owned
   `<rb:toggle/>`/`<rb:action/>`/`<rb:value>` tag (self-heals). `show_completed`
-  (toggle), `restart` (action → `os.execv`), `poll_ms` (value, clamped 100–600000,
-  live). Add one: append a `Setting(...)` to `SETTINGS`, read it in `sync_once`.
+  (toggle), `dashboard` (toggle → daemon spawns/reaps the `serve` child via
+  `serverctl`), `restart` (action → `os.execv`), `poll_ms` (value, clamped
+  100–600000, live). Add one: append a `Setting(...)` to `SETTINGS`, read it in
+  `sync_once`.
 - **`!_rb_readme`** — `docs/AGENT.md` verbatim; `!` sorts first; completion
   user-owned. Don't store bead data.
 - **`_rb_activity`** — rolling ~200-event log, daemon-owned, drift overwritten.
