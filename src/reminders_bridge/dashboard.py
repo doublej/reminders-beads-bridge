@@ -76,13 +76,25 @@ def valid(token: str) -> bool:
     )
 
 
+def public_base() -> str:
+    """Base URL advertised to agents. Behind a reverse proxy this is the public
+    origin (e.g. https://rbridge.jurrejan.com); locally it's the bind address,
+    with 0.0.0.0 displayed as loopback."""
+    base = os.getenv("RBRIDGE_DASHBOARD_PUBLIC_URL")
+    if base:
+        return base.rstrip("/")
+    h = host() if host() not in ("0.0.0.0", "") else "127.0.0.1"
+    return f"http://{h}:{port()}"
+
+
 def url(token: str | None = None) -> str:
-    return f"http://{host()}:{port()}/?t={token or current_token()}"
+    return f"{public_base()}/?t={token or current_token()}"
 
 
 def alive() -> bool:
+    probe = host() if host() not in ("0.0.0.0", "") else "127.0.0.1"
     try:
-        with socket.create_connection((host(), port()), timeout=0.3):
+        with socket.create_connection((probe, port()), timeout=0.3):
             return True
     except OSError:
         return False
