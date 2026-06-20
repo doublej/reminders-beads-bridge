@@ -24,6 +24,7 @@ Dev workflow uses `uv`. Installs are implicit via `uv run`.
 uv run rbridge doctor    # verify bd CLI, Reminders permission, registry, lanes
 uv run rbridge sync      # one-shot reconcile (safe, idempotent)
 uv run rbridge run       # foreground poll loop
+uv run rbridge serve     # read-only at-a-glance HTTP endpoint (token-gated, 127.0.0.1)
 uv run rbridge status    # registry + link counts per project
 uv run rbridge lint      # diagnose drift, orphans, missing tags
 uv run rbridge prime     # emit the voice-takeout playbook (--json for the contract)
@@ -80,7 +81,8 @@ Load-bearing invariants:
 - **session triggers** (`triggers.py`, `launch.py`, `captures.py`, `sessions.py`) — `_rb_claude_sessions`/`_rb_codex_sessions`; each unchecked reminder is a pending session in interactive / capture / chat / fixer mode. See `docs/REFERENCE.md` → "Sessions".
 - **claude tabs** (`tabs.py`, `tabsbody.py`, `ghostty.py`, `transcript.py`, `inject.py`) — mirror live Ghostty Claude tabs into `_rb_claude_tabs`; `send:` text + completion in **one** write types into the live tab (completion is the trigger; GUI inject, needs Accessibility). See `docs/REFERENCE.md` → "Claude tabs".
 - **voice mailboxes** (`mailbox.py`, `mirror.py`, `navigation.py`, `sandbox.py`, `prime.py`, `primer.md`) — one `_rb_voice_<slug>` list per exchange; file-nav serves `fetch:`/`grep:`/`tree:`. Authoring playbook = `rbridge prime` (`primer.md`); voice-agent directive = `docs/AGENT.md`; vocabulary + flow = `docs/REFERENCE.md`; editing rules = `.claude/rules/voice-surfaces.md`.
-- **controls** (`settings.py`, `projects_list.py`, `readme.py`, `activity.py`) — the daemon-owned `_rb_settings` / `_rb_beads_projects` / `!_rb_readme` / `_rb_activity` lists (Sync rules below).
+- **controls** (`settings.py`, `projects_list.py`, `readme.py`, `activity.py`, `dashboard.py`) — the daemon-owned `_rb_settings` / `_rb_beads_projects` / `!_rb_readme` / `_rb_activity` / `_rb_dashboard` lists (Sync rules below).
+- **dashboard endpoint** (`snapshot.py`, `server.py`, `dashboard.py`) — read-only HTTP at-a-glance view via `rbridge serve` (separate process). `snapshot.py` builds the view from disk (no EventKit); `dashboard.py` mints a rotating token + surfaces the live URL in `_rb_dashboard`. Writes stay in rbridge. See `docs/REFERENCE.md` → "Dashboard endpoint".
 - **agent dispatch** (`agent_marker.py`) — `!agent` in `<bb:notes>` → enqueue a coding session; rewritten to `<bb:agent …/>`.
 
 ## Sync rules (the editing contract)
@@ -133,6 +135,9 @@ exactly `{bead-id}: {bead-title}`. Editing `body.py` → see
 - **`!_rb_readme`** — `docs/AGENT.md` verbatim; `!` sorts first; completion
   user-owned. Don't store bead data.
 - **`_rb_activity`** — rolling ~200-event log, daemon-owned, drift overwritten.
+- **`_rb_dashboard`** — one reminder: the live `rbridge serve` URL with a rotating
+  token (HMAC of a shared secret, time-windowed). Daemon-owned, drift overwritten;
+  body notes when the server is down. Agent entry point for the at-a-glance view.
 - Lossless calendar renames migrate pre-`_rb_` list names in place; only dead
   historical names are deleted on startup (`_LEGACY_NAMES`).
 

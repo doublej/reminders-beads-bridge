@@ -41,6 +41,7 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `_rb_settings` | Bridge-global controls (any pre-rename `Beads: Settings` / `rbridge: Settings` list is migrated in place via a lossless calendar rename). Each control body carries a uniform daemon-owned XML tag. Three kinds: **toggles** (`Show completed tasks` — body `<rb:toggle/>`; off → closed beads pruned, on → surfaced as completed), an **action** (`Restart bridge` — body `<rb:action/>`; complete it to re-exec the daemon; it un-completes itself), and a **value** (`Poll interval (ms)` — edit the int inside the body's `<rb:value min="100" max="600000">5000</rb:value>` tag, 100–600000 ms, applied live; out-of-range snaps to the clamp). | Daemon writes the rows; you complete/edit them. |
 | `!_rb_readme` | Pinned `docs/AGENT.md` for the agent reading inside Reminders. Leading `!` makes the list sort first under `reminder_list_search_v0`, so any cold-start Claude session lands on the directive before doing anything else. Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_README_LIST`). | Daemon (overwrites drift). |
 | `_rb_activity` | Rolling log of the last ~200 bridge events (created / closed / reopened / captured / restored / pruned / hidden / status / voice-opened / voice-closed). Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_ACTIVITY_LIST`). | Daemon (overwrites drift). |
+| `_rb_dashboard` | One reminder holding the live URL (with a rotating token) for the at-a-glance HTTP endpoint served by `rbridge serve`. The agent entry point: a coding agent opens the URL with `WebFetch`. Body notes when the server is down. Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_DASHBOARD_LIST`). See "Dashboard endpoint". | Daemon (overwrites drift). |
 | `_rb_voice_<slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `_rb_beads_` prefix — the voice flow is independent of beads. | Agent + user (responses). |
 | `_rb_claude_tabs` | One reminder per live Ghostty tab running Claude Code. Body = status header + live transcript tail + message log + a `send:` region. See "Claude tabs". Deliberately drops the `_rb_beads_` prefix — independent of beads. | Daemon writes the body; you type under `send:` and check to send. |
 
@@ -73,6 +74,12 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_SETTINGS_LIST` | `_rb_settings` | Name of the bridge-global settings/controls list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_README_LIST` | `!_rb_readme` | Name of the pinned agent-context (Readme) list (independent of `RBRIDGE_LIST_PREFIX`). |
 | `RBRIDGE_ACTIVITY_LIST` | `_rb_activity` | Name of the rolling activity-log list (independent of `RBRIDGE_LIST_PREFIX`). |
+| `RBRIDGE_DASHBOARD_LIST` | `_rb_dashboard` | Name of the list holding the dashboard URL reminder (independent of `RBRIDGE_LIST_PREFIX`). |
+| `RBRIDGE_DASHBOARD_HOST` | `127.0.0.1` | Bind/advertise host for `rbridge serve`. Keep loopback-only unless you know what you're doing. |
+| `RBRIDGE_DASHBOARD_PORT` | `8765` | Port for `rbridge serve` and the advertised URL. |
+| `RBRIDGE_DASHBOARD_WINDOW_S` | `900` | Token rotation window (seconds, min 60). `serve` accepts the current + previous window. |
+| `RBRIDGE_DASHBOARD_SECRET` | (none) | Shared HMAC secret. If unset, a random one is generated and persisted to the secret file. |
+| `RBRIDGE_DASHBOARD_SECRET_FILE` | `~/.claude/reminders-bridge-dashboard-secret` | Where the generated secret is stored (mode 0600). Both the daemon and `serve` read it. |
 | `RBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
 | `RBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
 | `RBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
@@ -103,6 +110,7 @@ uv run rbridge run       # persistent poll loop
 
 - `rbridge run` — Daemon: poll registry, reconcile every `RBRIDGE_POLL_S` seconds.
 - `rbridge sync` — One-shot reconcile, print visible project count.
+- `rbridge serve [--port N] [--host H]` — Serve the read-only at-a-glance HTTP endpoint (token-gated). See "Dashboard endpoint".
 - `rbridge status` — Print registry + projects/settings list state + link counts per project (with `[hidden]` / `[visible]` flag).
 - `rbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
 - `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API. Also prints active voice mailbox count, the global file-nav switch, and each mailbox's nav state + root.
@@ -224,6 +232,35 @@ Title resolution + session id come from `~/.claude/sessions/<pid>.json` (authori
 **GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `_rb_claude_sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-send-failed`, `tab-closed`.
 
 `rbridge tabs` prints the discovered tabs (pid / tty / mode / session / project) without touching Reminders.
+
+## Dashboard endpoint
+
+A read-only HTTP view of the whole bridge "at a glance" — projects, per-status
+bead counts, link counts, and recent activity — for an agent (or you) to fetch
+in one request instead of reading many lists.
+
+**Why HTTP, not the `bd` CLI.** A coding agent can `WebFetch` a URL in one tool
+call; `curl` works too. The page is the cleanest entry point: point an agent at
+the `_rb_dashboard` reminder, it fetches the URL, and gets the full picture.
+
+**Run it.** `rbridge serve` (separate process from the daemon — bind it under
+your own launchd job, or run on demand). It binds `127.0.0.1:8765` by default.
+The endpoint is **read-only**; all writes still go through rbridge / the daemon
+(EventKit stays single-owner, so `serve` never touches Reminders — it reads the
+registry, `state.json`, `bd list`, and the activity log directly).
+
+**Routes** (all on `/`):
+- `GET /?t=<token>` → minimal HTML.
+- `GET /?t=<token>&format=json` → the same snapshot as JSON.
+- Missing/expired token → `403`; any other path → `404`.
+
+**Auth.** The token is a time-windowed HMAC of a shared secret
+(`RBRIDGE_DASHBOARD_SECRET`, else a generated `…-secret` file). It rotates every
+`RBRIDGE_DASHBOARD_WINDOW_S` (default 15 min); `serve` accepts the current and
+previous window. The daemon surfaces the **live URL with the current token** in
+the `_rb_dashboard` reminder each poll (and notes when `serve` is down), so the
+rotating token never lives in static docs. The agent reads the URL from that
+reminder; reopen it for a fresh link.
 
 ## Voice exchange mailboxes
 
