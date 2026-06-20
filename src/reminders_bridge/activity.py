@@ -39,6 +39,11 @@ def record(project: str, kind: str, bead_id: str | None = None, detail: str = ""
         f.write(json.dumps(entry) + "\n")
 
 
+def entries() -> list[dict]:
+    """Recent log entries, oldest-first (public read accessor for snapshots)."""
+    return _tail()
+
+
 def _tail() -> list[dict]:
     p = _path()
     if not p.exists():

@@ -21,7 +21,7 @@ from . import state as state_module
 from . import tabs as tabs_module
 
 
-USAGE = "Usage: rbridge [run|sync|doctor|status|lint|probe|mailbox|tabs|prime]"
+USAGE = "Usage: rbridge [run|sync|serve|doctor|status|lint|probe|mailbox|tabs|prime]"
 
 
 def main() -> None:
@@ -30,6 +30,8 @@ def main() -> None:
         daemon_module.run()
     elif cmd == "sync":
         sync_once()
+    elif cmd == "serve":
+        serve(sys.argv[2:])
     elif cmd == "doctor":
         doctor()
     elif cmd == "status":
@@ -55,6 +57,16 @@ def sync_once() -> None:
     state = state_module.load(cfg.state_path)
     count = daemon_module.sync_once(cfg, state)
     print(f"Synced {count} project(s).")
+
+
+def serve(args: list[str]) -> None:
+    from . import server as server_module
+
+    parser = argparse.ArgumentParser(prog="rbridge serve")
+    parser.add_argument("--port", type=int, default=None, help="override RBRIDGE_DASHBOARD_PORT")
+    parser.add_argument("--host", default=None, help="override bind host (default 127.0.0.1)")
+    ns = parser.parse_args(args)
+    server_module.run(port=ns.port, host=ns.host)
 
 
 def tabs() -> None:
