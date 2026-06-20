@@ -92,6 +92,23 @@ def _resolve_cwd(pid: int) -> str:
     return ""
 
 
+def count() -> int:
+    """Number of live Claude tabs without the per-tab `lsof` cwd resolution —
+    cheap enough for the dashboard overview's tab total."""
+    procs = _ps()
+    roots = _ghostty_pids(procs)
+    if not roots:
+        return 0
+    ppid_of = {p.pid: p.ppid for p in procs}
+    return sum(
+        1
+        for p in procs
+        if p.tty not in ("??", "-")
+        and _is_claude(p.command)
+        and _has_ghostty_ancestor(p.pid, ppid_of, roots)
+    )
+
+
 def discover() -> list[Tab]:
     procs = _ps()
     roots = _ghostty_pids(procs)

@@ -141,3 +141,9 @@ def activity(d: dict[str, Any], token: str) -> str:
         "",
         _nav(token),
     ])
+
+
+RENDER = {
+    "overview": overview, "project": project, "sessions": sessions,
+    "tabs": tabs, "voice": voice, "activity": activity,
+}

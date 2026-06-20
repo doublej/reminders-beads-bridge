@@ -14,6 +14,7 @@ as JSON by `dashpages` / `server`).
 import datetime as _dt
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from . import activity as activity_module
@@ -165,10 +166,19 @@ def project_view(cfg: config_module.Config, name: str) -> dict[str, Any] | None:
 
 def overview(cfg: config_module.Config) -> dict[str, Any]:
     state = state_module.load(cfg.state_path)
+    projs = _projects(cfg)
+    # `bd list` per project is the dominant cost; fan it out (subprocess → no GIL
+    # contention) so the overview is ~one bd call, not the sum of all. Tab/voice
+    # counts (also subprocess/file work) run concurrently in the same pool.
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        f_tabs = ex.submit(ghostty_module.count)
+        f_voice = ex.submit(lambda: len(mailbox_module.list_active()))
+        beaded = list(ex.map(lambda p: (p, *_beads(p)), projs))
+        tabs_count = f_tabs.result()
+        voice_count = f_voice.result()
     rows = []
     agg: dict[str, int] = {}
-    for p in _projects(cfg):
-        issues, err = _beads(p)
+    for p, issues, err in beaded:
         counts = _counts(issues)
         for k, v in counts.items():
             agg[k] = agg.get(k, 0) + v
@@ -180,7 +190,7 @@ def overview(cfg: config_module.Config) -> dict[str, Any]:
             "linked": len(ps.links) if ps else 0,
             "error": err,
         })
-    sess = sessions(cfg)["sessions"]
+    sess = sessions(cfg)["sessions"]  # EventKit read — keep on the handler thread
     return {
         "generated_at": _now(),
         "config": _config(cfg),
@@ -188,8 +198,8 @@ def overview(cfg: config_module.Config) -> dict[str, Any]:
             "projects": len(rows),
             "beads": agg,
             "sessions_pending": sum(1 for s in sess if not s["completed"]),
-            "tabs": len(tabs(cfg)["tabs"]),
-            "voice": len(voice(cfg)["mailboxes"]),
+            "tabs": tabs_count,  # count only — no per-tab transcript resolve
+            "voice": voice_count,
         },
         "projects": rows,
         "activity": list(reversed(activity_module.entries()))[:20],
