@@ -259,8 +259,9 @@ do from a one-shot process).
 
 **Output.** Compact markdown by default — the primary reader is an agent
 fetching the URL, so it's dense and chrome-free. `&format=json` returns the same
-data structured. Drill-down is path-based; the token is stated once and appended
-as `?t=<token>`:
+data structured; `&format=html` (or a bare `&html`) returns a browser view with
+clickable drill-down links. Drill-down is path-based; the token is stated once
+and appended as `?t=<token>`:
 
 | Path | Shows |
 |------|-------|
@@ -280,6 +281,18 @@ previous window. The daemon surfaces the **live URL with the current token** in
 the `_rb_dashboard` reminder each poll (and notes when `serve` is down), so the
 rotating token never lives in static docs. The agent reads the URL from that
 reminder; reopen it for a fresh link.
+
+**Deployment (`rbridge.jurrejan.com`).** The daemon's launchd plist sets
+`RBRIDGE_DASHBOARD_HOST=0.0.0.0` (accept off-host connections) and
+`RBRIDGE_DASHBOARD_PUBLIC_URL=https://rbridge.jurrejan.com` (advertised origin).
+The NAS Caddy (`caddy-porkbun`) reverse-proxies the public host to this Mac:
+`etc/sites/rbridge.caddy` → `reverse_proxy 192.168.178.180:47900` (with
+`import site_10mb`; no `admin_ip_check`, since off-LAN agents must reach it — the
+rotating token is the gate). DNS is the existing wildcard `*.jurrejan.com`; TLS
+is Caddy on-demand. **Reliability caveat:** the proxy target is the Mac's LAN IP,
+so it needs a DHCP reservation for `192.168.178.180` or the proxy breaks when the
+lease changes. The overview costs ~3.5s (a parallel `bd list` per project); a
+daemon-written snapshot cache would make it instant if needed.
 
 ## Voice exchange mailboxes
 
