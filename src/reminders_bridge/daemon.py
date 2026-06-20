@@ -22,6 +22,7 @@ from . import projects_list as projects_list_module
 from . import readme as readme_module
 from . import projects as projects_module
 from . import reminders as reminders_module
+from . import serverctl as serverctl_module
 from . import settings as settings_module
 from . import state as state_module
 from . import tabs as tabs_module
@@ -377,6 +378,7 @@ def _run_triggers() -> None:
 def _restart() -> None:
     log.info("Restart requested via Settings — re-executing %s", sys.argv)
     activity_module.record(settings_module.list_name(), "restarted", "", "via settings")
+    serverctl_module.ensure(False)  # reap the serve child so the new daemon can re-bind
     os.execv(sys.argv[0], sys.argv)
 
 
@@ -387,6 +389,7 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
         if abs(new_s - cfg.poll_interval_s) > 1e-9:
             log.info("Poll interval set via Settings: %.3fs → %.3fs", cfg.poll_interval_s, new_s)
             cfg.poll_interval_s = new_s
+    _safe("Dashboard server lifecycle", serverctl_module.ensure, bool(settings.get("dashboard", False)))
     if settings.get("restart"):
         _restart()
 

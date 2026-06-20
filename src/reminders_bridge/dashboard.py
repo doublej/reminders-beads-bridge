@@ -80,7 +80,7 @@ def url(token: str | None = None) -> str:
     return f"http://{host()}:{port()}/?t={token or current_token()}"
 
 
-def _alive() -> bool:
+def alive() -> bool:
     try:
         with socket.create_connection((host(), port()), timeout=0.3):
             return True
@@ -90,8 +90,11 @@ def _alive() -> bool:
 
 def _body() -> str:
     lines = [url()]
-    if not _alive():
-        lines += ["", "(server not running — start it with: rbridge serve)"]
+    if not alive():
+        lines += [
+            "",
+            "(server off — check the 'Dashboard server' setting in _rb_settings to start it)",
+        ]
     lines += [
         "",
         "At-a-glance view of the bridge: projects, bead counts, recent activity.",

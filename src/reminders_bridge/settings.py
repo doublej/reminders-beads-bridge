@@ -56,6 +56,16 @@ SETTINGS: tuple[Setting, ...] = (
         ),
     ),
     Setting(
+        key="dashboard",
+        title="Dashboard server",
+        body=(
+            "Check to run the read-only at-a-glance HTTP endpoint (managed by "
+            "the bridge as a child process). When on, open the URL in the "
+            "_rb_dashboard reminder for projects, bead counts, and recent "
+            "activity in one fetch. Uncheck to stop it."
+        ),
+    ),
+    Setting(
         key="restart",
         title="Restart bridge",
         kind="action",
