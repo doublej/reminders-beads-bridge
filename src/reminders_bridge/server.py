@@ -11,7 +11,7 @@ proxy).
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from . import config as config_module
 from . import dashboard as dashboard_module
@@ -68,7 +68,10 @@ class _Handler(BaseHTTPRequestHandler):
         if fmt == "json":
             self._send(200, "application/json", json.dumps(data, indent=2).encode())
         elif fmt == "html" or "html" in query:
-            html = dashhtml_module.RENDER[view](data, token)
+            # persist all incoming params (token, format/html, …) on nav links so
+            # navigation stays in the same view/format.
+            qs = "?" + urlencode([(k, v) for k, vs in query.items() for v in vs])
+            html = dashhtml_module.RENDER[view](data, qs)
             self._send(200, "text/html; charset=utf-8", html.encode())
         else:
             md = dashpages_module.RENDER[view](data, token)

@@ -1,7 +1,9 @@
 """Render dashboard view dicts as minimal HTML with clickable drill-down links.
 
 For a human in a browser (`?format=html` or `?html`). Agents use the default
-markdown / `?format=json`. Links carry the token so navigation stays authed.
+markdown / `?format=json`. Every internal link carries the full incoming query
+string (`qs`, e.g. `?t=…&html`) so navigation keeps the token *and* the chosen
+format/view.
 """
 
 import html
@@ -13,8 +15,8 @@ def _esc(value: Any) -> str:
     return html.escape(str(value))
 
 
-def _href(path: str, label: str, token: str) -> str:
-    return f'<a href="{path}?t={_esc(token)}">{_esc(label)}</a>'
+def _href(path: str, label: str, qs: str) -> str:
+    return f'<a href="{_esc(path + qs)}">{_esc(label)}</a>'
 
 
 def _counts(counts: dict[str, int]) -> str:
@@ -32,18 +34,18 @@ _STYLE = (
 )
 
 
-def _nav(token: str) -> str:
+def _nav(qs: str) -> str:
     items = [
         ("/", "overview"), ("/sessions", "sessions"), ("/tabs", "tabs"),
         ("/voice", "voice"), ("/activity", "activity"),
     ]
-    return "<nav>" + " · ".join(_href(p, label, token) for p, label in items) + "</nav>"
+    return "<nav>" + " · ".join(_href(p, label, qs) for p, label in items) + "</nav>"
 
 
-def _page(title: str, token: str, body: str) -> str:
+def _page(title: str, qs: str, body: str) -> str:
     return (
         f"<!doctype html><html><head><meta charset=utf-8><title>{_esc(title)}</title>"
-        f"<style>{_STYLE}</style></head><body>{_nav(token)}{body}</body></html>"
+        f"<style>{_STYLE}</style></head><body>{_nav(qs)}{body}</body></html>"
     )
 
 
@@ -62,12 +64,12 @@ def _activity_table(entries: list[dict[str, Any]]) -> str:
     )
 
 
-def overview(d: dict[str, Any], token: str) -> str:
+def overview(d: dict[str, Any], qs: str) -> str:
     cfg = d["config"]
     t = d["totals"]
     project_rows = []
     for p in d["projects"]:
-        name = _href(f"/project/{quote(p['name'])}", p["name"], token)
+        name = _href(f"/project/{quote(p['name'])}", p["name"], qs)
         if p["error"]:
             project_rows.append(f"<tr><td>{name}</td><td colspan=3 class=err>"
                                 f"{_esc(p['error'][:200])}</td></tr>")
@@ -88,10 +90,10 @@ def overview(d: dict[str, Any], token: str) -> str:
         f"{''.join(project_rows) or '<tr><td>(none)</td></tr>'}</table>"
         f"<h2>recent activity</h2>{_activity_table(d['activity'])}"
     )
-    return _page("rbridge", token, body)
+    return _page("rbridge", qs, body)
 
 
-def project(d: dict[str, Any], token: str) -> str:
+def project(d: dict[str, Any], qs: str) -> str:
     rows = "".join(
         f"<tr><td>{_esc(b['id'])}</td><td>p{b['priority']}</td>"
         f"<td>{_esc(b['status'])}</td><td>{_esc(b['type'])}</td>"
@@ -106,10 +108,10 @@ def project(d: dict[str, Any], token: str) -> str:
         "<table><tr><th>id</th><th>pri</th><th>status</th><th>type</th>"
         f"<th>linked</th><th>title</th></tr>{rows or '<tr><td>(none)</td></tr>'}</table>"
     )
-    return _page(d["name"], token, body)
+    return _page(d["name"], qs, body)
 
 
-def sessions(d: dict[str, Any], token: str) -> str:
+def sessions(d: dict[str, Any], qs: str) -> str:
     rows = "".join(
         f"<tr><td>{_esc(s['engine'])}</td>"
         f"<td>{'done' if s['completed'] else 'pending'}</td>"
@@ -121,10 +123,10 @@ def sessions(d: dict[str, Any], token: str) -> str:
         "<table><tr><th>engine</th><th>state</th><th>mode</th><th>title</th></tr>"
         f"{rows or '<tr><td>(none)</td></tr>'}</table>"
     )
-    return _page("sessions", token, body)
+    return _page("sessions", qs, body)
 
 
-def tabs(d: dict[str, Any], token: str) -> str:
+def tabs(d: dict[str, Any], qs: str) -> str:
     rows = "".join(
         f"<tr><td>{t['pid']}</td><td>{_esc(t['tty'])}</td><td>{_esc(t['mode'])}</td>"
         f"<td>{_esc(t['session'] or '-')}</td><td>{_esc(t['title'] or t['cwd'])}</td></tr>"
@@ -135,10 +137,10 @@ def tabs(d: dict[str, Any], token: str) -> str:
         "<table><tr><th>pid</th><th>tty</th><th>mode</th><th>session</th>"
         f"<th>title/cwd</th></tr>{rows or '<tr><td>(none live)</td></tr>'}</table>"
     )
-    return _page("tabs", token, body)
+    return _page("tabs", qs, body)
 
 
-def voice(d: dict[str, Any], token: str) -> str:
+def voice(d: dict[str, Any], qs: str) -> str:
     rows = "".join(
         f"<tr><td>{_esc(m['slug'])}</td><td>{_esc(m['kind'])}</td>"
         f"<td>{_esc(m['created_at'])}</td><td>{_esc(m['root'] or '—')}</td></tr>"
@@ -149,12 +151,12 @@ def voice(d: dict[str, Any], token: str) -> str:
         "<table><tr><th>slug</th><th>kind</th><th>created</th><th>root</th></tr>"
         f"{rows or '<tr><td>(none active)</td></tr>'}</table>"
     )
-    return _page("voice", token, body)
+    return _page("voice", qs, body)
 
 
-def activity(d: dict[str, Any], token: str) -> str:
+def activity(d: dict[str, Any], qs: str) -> str:
     body = f"<h1>activity</h1>{_activity_table(d['activity'])}"
-    return _page("activity", token, body)
+    return _page("activity", qs, body)
 
 
 RENDER = {
