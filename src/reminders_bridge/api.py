@@ -42,7 +42,11 @@ class Client:
             req.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
-                payload = json.loads(r.read() or b"{}")
+                raw = r.read() or b"{}"
+            try:
+                payload = json.loads(raw)
+            except (json.JSONDecodeError, ValueError) as e:
+                raise APIError("NON_JSON", f"{url} returned non-JSON response") from e
         except urllib.error.HTTPError as e:
             try:
                 payload = json.loads(e.read() or b"{}")
