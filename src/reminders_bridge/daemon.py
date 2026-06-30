@@ -404,21 +404,21 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
 # pipeline (incl. the ~280ms Ghostty `ps` scan) reran every poll.
 _LANE_EVERY_S: dict[str, float] = {
     "migrate": 120.0,
-    "projects_list": 20.0,
+    "projects_list": 30.0,
     "settings": 10.0,
     "readme": 60.0,
     "dashboard": 60.0,
-    "activity": 20.0,
-    "captures": 10.0,
-    "sessions": 12.0,
-    "tabs": 45.0,
-    "triggers": 15.0,
-    "mailbox": 30.0,
+    "activity": 30.0,
+    "captures": 15.0,
+    "sessions": 20.0,
+    "tabs": 60.0,
+    "triggers": 20.0,
+    "mailbox": 60.0,
     "reconcile": 10.0,
 }
 _lane_last: dict[str, float] = {}
 _cache: dict[str, Any] = {"hidden": set(), "settings": None}
-_MIN_WAIT_S = float(os.getenv("RBRIDGE_MIN_WAIT_S", "2.0"))
+_MIN_WAIT_S = float(os.getenv("RBRIDGE_MIN_WAIT_S", "3.0"))
 
 
 def _due(name: str, now: float, woke: bool) -> bool:
