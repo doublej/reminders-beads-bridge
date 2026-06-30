@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+from typing import Any
 
 from . import activity as activity_module
 from . import agent_marker as agent_marker_module
@@ -394,15 +395,61 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
         _restart()
 
 
-def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
+# Idle-tick throttle. On an EventKit-change wakeup (woke=True) every lane runs
+# regardless — Reminders edits (toggles, tab `send:`, voice `fetch:`, completing
+# a task) stay instant. These intervals only throttle *pure-interval* idle ticks,
+# where nothing in Reminders changed: a lane whose sole non-Reminders trigger is a
+# subprocess exit, a new Ghostty tab, or a `bd` edit tolerates this latency. This
+# is what keeps idle CPU low even when poll_ms is small — without it the full
+# pipeline (incl. the ~280ms Ghostty `ps` scan) reran every poll.
+_LANE_EVERY_S: dict[str, float] = {
+    "migrate": 60.0,
+    "projects_list": 10.0,
+    "settings": 8.0,
+    "readme": 30.0,
+    "dashboard": 30.0,
+    "activity": 10.0,
+    "captures": 5.0,
+    "sessions": 6.0,
+    "tabs": 20.0,
+    "triggers": 8.0,
+    "mailbox": 12.0,
+    "reconcile": 8.0,
+}
+_lane_last: dict[str, float] = {}
+_cache: dict[str, Any] = {"hidden": set(), "settings": None}
+
+
+def _due(name: str, now: float, woke: bool) -> bool:
+    if woke or (now - _lane_last.get(name, 0.0)) >= _LANE_EVERY_S[name]:
+        _lane_last[name] = now
+        return True
+    return False
+
+
+def sync_once(
+    cfg: config_module.Config, state: state_module.State, woke: bool = False
+) -> int:
+    now = time.monotonic()
     with reminders_module.autorelease_pool():
         all_projects = projects_module.load_projects(cfg.registry_path, cfg.list_prefix)
         active = projects_module.filter_existing(all_projects)
-        _safe("List migration", migrate_module.run, cfg.list_prefix, active)
-        hidden = _safe("Projects list sync", projects_list_module.sync, cfg.list_prefix, active) or set()
-        settings = _safe("Settings list sync", settings_module.sync)
-        if settings is None:
-            settings = settings_module.defaults()
+        if _due("migrate", now, woke):
+            _safe("List migration", migrate_module.run, cfg.list_prefix, active)
+        projects_due = _due("projects_list", now, woke)
+        if projects_due:
+            hidden = _safe(
+                "Projects list sync", projects_list_module.sync, cfg.list_prefix, active
+            )
+            if hidden is not None:
+                _cache["hidden"] = hidden
+        hidden = _cache["hidden"]
+        if _cache["settings"] is None or _due("settings", now, woke):
+            settings = _safe("Settings list sync", settings_module.sync)
+            if settings is None:
+                settings = settings_module.defaults()
+            _cache["settings"] = settings
+        settings = _cache["settings"]
         _apply_controls(cfg, settings)
         visible = [p for p in active if p.name not in hidden]
         log.info(
@@ -414,23 +461,36 @@ def sync_once(cfg: config_module.Config, state: state_module.State) -> int:
             settings,
         )
         client = api_module.Client(base_url=cfg.api_url, timeout_s=cfg.api_timeout_s)
-        _safe("Readme list sync", readme_module.sync)
-        _safe("Dashboard list sync", dashboard_module.sync)
-        _safe("Activity list sync", _run_activity)
-        _safe("Capture poll", captures_module.poll)
-        _safe("Sessions poll", sessions_module.poll)
-        _safe("Tabs sync", tabs_module.sync)
-        _safe("Trigger lists sync", _run_triggers)
-        _safe("Mailbox sync", mailbox_module.sync)
-        _safe("Apply hides", projects_list_module.apply_hides, active, hidden, state, cfg.state_path)
-        show_completed = settings.get("show_completed", False)
-        for project in visible:
-            with reminders_module.autorelease_pool():
-                t0 = time.monotonic()
-                reconcile_project(
-                    project, cfg, state, client, show_completed=show_completed
-                )
-                log.info("%s done in %.1fs", project.name, time.monotonic() - t0)
+        if _due("readme", now, woke):
+            _safe("Readme list sync", readme_module.sync)
+        if _due("dashboard", now, woke):
+            _safe("Dashboard list sync", dashboard_module.sync)
+        if _due("activity", now, woke):
+            _safe("Activity list sync", _run_activity)
+        if _due("captures", now, woke):
+            _safe("Capture poll", captures_module.poll)
+        if _due("sessions", now, woke):
+            _safe("Sessions poll", sessions_module.poll)
+        if _due("tabs", now, woke):
+            _safe("Tabs sync", tabs_module.sync)
+        if _due("triggers", now, woke):
+            _safe("Trigger lists sync", _run_triggers)
+        if _due("mailbox", now, woke):
+            _safe("Mailbox sync", mailbox_module.sync)
+        if projects_due:
+            _safe(
+                "Apply hides", projects_list_module.apply_hides,
+                active, hidden, state, cfg.state_path,
+            )
+        if _due("reconcile", now, woke):
+            show_completed = settings.get("show_completed", False)
+            for project in visible:
+                with reminders_module.autorelease_pool():
+                    t0 = time.monotonic()
+                    reconcile_project(
+                        project, cfg, state, client, show_completed=show_completed
+                    )
+                    log.info("%s done in %.1fs", project.name, time.monotonic() - t0)
         reminders_module.reset_store()
         return len(visible)
 
@@ -456,7 +516,7 @@ def run() -> None:
         woke = watcher_module.wait(float(cfg.poll_interval_s))
         try:
             t0 = time.monotonic()
-            sync_once(cfg, state)
+            sync_once(cfg, state, woke=woke)
             log.info(
                 "Sync (%s) in %.1fs",
                 "event" if woke else "interval",
