@@ -405,14 +405,14 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
 _LANE_EVERY_S: dict[str, float] = {
     "migrate": 120.0,
     "projects_list": 30.0,
-    "settings": 10.0,
+    "settings": 30.0,
     "readme": 60.0,
     "dashboard": 60.0,
     "activity": 30.0,
-    "captures": 15.0,
-    "sessions": 20.0,
+    "captures": 30.0,
+    "sessions": 30.0,
     "tabs": 60.0,
-    "triggers": 20.0,
+    "triggers": 30.0,
     "mailbox": 60.0,
     "reconcile": 10.0,
 }
