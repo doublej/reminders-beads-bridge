@@ -67,12 +67,22 @@ Every poll, `daemon.sync_once()` runs the lanes in order:
    `captures.poll`, `sessions.poll`, `tabs.sync`, `mailbox.sync`, `settings.sync`.
 6. Persist the state map (`~/.claude/reminders-bridge-state.json`).
 
+Each lane (incl. beads reconcile) is gated by `_due()` in `daemon.py`: on an
+EventKit-change wakeup (`woke`) every lane runs immediately; on a pure-interval
+idle tick a lane runs only when its `_LANE_EVERY_S` interval has elapsed. This
+keeps idle CPU low without changing sync semantics — interactive edits stay
+instant via `woke`; only non-Reminders changes (new bead/tab, finished child)
+wait out the interval. The loop wait is also floored at `RBRIDGE_MIN_WAIT_S` and
+skips the watcher settle-pump on cycles that wrote nothing.
+
 Load-bearing invariants:
 - Title format `{bead-id}: {title}` — parsed to adopt pre-existing reminders.
 - Body is fully daemon-managed **except** `<bb:notes>`. Drift in
   `<bb:meta>`/`<bb:desc>` is tamper.
 - Reconcile is idempotent — a clean sync logs zero changes.
-- No event channel from beads; freshness = poll interval (launchd sets 5s).
+- No event channel from beads; freshness = the lane's `_LANE_EVERY_S` interval
+  on idle ticks (EventKit edits wake all lanes immediately). `poll_ms`/launchd
+  set the wake cadence, floored by `RBRIDGE_MIN_WAIT_S`.
 
 ### The lanes (one line each; modules in parens)
 
