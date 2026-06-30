@@ -39,10 +39,14 @@ _store: EKEventStore | None = None
 
 
 def _spin(while_cond) -> None:
+    # `runMode:beforeDate:` returns as soon as EventKit's completion source is
+    # processed, so the timeout only caps idle sleep between checks — a wide
+    # value adds no latency to the common (sub-ms callback) case but avoids
+    # needless 50 Hz FFI wakeups while a slower async call (auth, commit) runs.
     loop = NSRunLoop.currentRunLoop()
     while while_cond():
         loop.runMode_beforeDate_(
-            _RUN_MODE, NSDate.dateWithTimeIntervalSinceNow_(0.02)
+            _RUN_MODE, NSDate.dateWithTimeIntervalSinceNow_(0.25)
         )
 
 
