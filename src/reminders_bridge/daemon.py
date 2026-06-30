@@ -403,21 +403,22 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
 # is what keeps idle CPU low even when poll_ms is small — without it the full
 # pipeline (incl. the ~280ms Ghostty `ps` scan) reran every poll.
 _LANE_EVERY_S: dict[str, float] = {
-    "migrate": 60.0,
-    "projects_list": 10.0,
-    "settings": 8.0,
-    "readme": 30.0,
-    "dashboard": 30.0,
-    "activity": 10.0,
-    "captures": 5.0,
-    "sessions": 6.0,
-    "tabs": 20.0,
-    "triggers": 8.0,
-    "mailbox": 12.0,
-    "reconcile": 8.0,
+    "migrate": 120.0,
+    "projects_list": 20.0,
+    "settings": 10.0,
+    "readme": 60.0,
+    "dashboard": 60.0,
+    "activity": 20.0,
+    "captures": 10.0,
+    "sessions": 12.0,
+    "tabs": 45.0,
+    "triggers": 15.0,
+    "mailbox": 30.0,
+    "reconcile": 10.0,
 }
 _lane_last: dict[str, float] = {}
 _cache: dict[str, Any] = {"hidden": set(), "settings": None}
+_MIN_WAIT_S = float(os.getenv("RBRIDGE_MIN_WAIT_S", "2.0"))
 
 
 def _due(name: str, now: float, woke: bool) -> bool:
@@ -513,7 +514,13 @@ def run() -> None:
     except Exception as e:
         log.warning("Could not install change observer; polling only: %s", e)
     while True:
-        woke = watcher_module.wait(float(cfg.poll_interval_s))
+        # Floor the idle wait: EventKit edits are detected within ~settle_s by
+        # the watcher regardless of this value, and every lane self-throttles to
+        # >= several seconds, so polling faster than this only burns CPU re-running
+        # the cheap per-cycle baseline with nothing to do. Honors a larger
+        # user-set poll_ms; only clamps the wasteful sub-floor end.
+        wait_s = max(_MIN_WAIT_S, float(cfg.poll_interval_s))
+        woke = watcher_module.wait(wait_s)
         try:
             t0 = time.monotonic()
             sync_once(cfg, state, woke=woke)
