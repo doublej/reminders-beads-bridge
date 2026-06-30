@@ -49,15 +49,25 @@ def _pump(seconds: float) -> None:
         )
 
 
-def wait(max_s: float, settle_s: float = 0.6, debounce_s: float = 0.4) -> bool:
+def wait(
+    max_s: float, wrote: bool = True, settle_s: float = 0.6, debounce_s: float = 0.4
+) -> bool:
     """Pump the runloop up to max_s; return True if a store change was observed.
 
     `settle_s` absorbs notifications fired by our own just-committed writes.
     `debounce_s` coalesces notification bursts from a single sync batch.
+
+    `wrote` reports whether the preceding sync committed anything. When it
+    didn't, there are no own-notifications to absorb, so we skip the settle
+    pre-pump (pure idle overhead) and do not clear `_change` — preserving any
+    external edit that landed during the sync so it wakes us immediately.
     """
-    _pump(settle_s)
-    _change.clear()
-    deadline = time.monotonic() + max(0.0, max_s - settle_s)
+    if wrote:
+        _pump(settle_s)
+        _change.clear()
+        deadline = time.monotonic() + max(0.0, max_s - settle_s)
+    else:
+        deadline = time.monotonic() + max_s
     loop = NSRunLoop.currentRunLoop()
     while time.monotonic() < deadline:
         loop.runMode_beforeDate_(

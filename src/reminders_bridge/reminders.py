@@ -36,6 +36,23 @@ class Batch:
 
 _RUN_MODE = "NSDefaultRunLoopMode"
 _store: EKEventStore | None = None
+_wrote = False
+
+
+def _mark_wrote() -> None:
+    global _wrote
+    _wrote = True
+
+
+def took_writes() -> bool:
+    """True iff a calendar/reminder mutation committed since the last call
+    (then resets). The poll loop uses this to skip the self-write settle pump
+    on idle cycles that changed nothing — there are no own-notifications to
+    absorb, so the pump would be pure overhead."""
+    global _wrote
+    v = _wrote
+    _wrote = False
+    return v
 
 
 def _spin(while_cond) -> None:
@@ -139,6 +156,7 @@ def create_list(name: str) -> None:
     ok, err = store.saveCalendar_commit_error_(cal, True, None)
     if not ok:
         raise RuntimeError(f"saveCalendar failed: {err}")
+    _mark_wrote()
 
 
 def delete_list(name: str) -> bool:
@@ -149,6 +167,7 @@ def delete_list(name: str) -> bool:
     ok, err = store.removeCalendar_commit_error_(cal, True, None)
     if not ok:
         raise RuntimeError(f"removeCalendar failed: {err}")
+    _mark_wrote()
     return True
 
 
@@ -173,6 +192,7 @@ def rename_list(old: str, new: str) -> bool:
     ok, err = store.saveCalendar_commit_error_(cal, True, None)
     if not ok:
         raise RuntimeError(f"rename {old!r}->{new!r} failed: {err}")
+    _mark_wrote()
     return True
 
 
@@ -257,4 +277,5 @@ def apply_batch(list_name: str, batch: Batch) -> list[str]:
     ok, err = store.commit_(None)
     if not ok:
         raise RuntimeError(f"commit failed: {err}")
+    _mark_wrote()
     return new_ids

@@ -509,6 +509,7 @@ def run() -> None:
         sync_once(cfg, state)
     except Exception as e:
         log.exception("Initial sync error: %s", e)
+    wrote = reminders_module.took_writes()
     try:
         watcher_module.install(reminders_module.get_store())
     except Exception as e:
@@ -520,10 +521,11 @@ def run() -> None:
         # the cheap per-cycle baseline with nothing to do. Honors a larger
         # user-set poll_ms; only clamps the wasteful sub-floor end.
         wait_s = max(_MIN_WAIT_S, float(cfg.poll_interval_s))
-        woke = watcher_module.wait(wait_s)
+        woke = watcher_module.wait(wait_s, wrote)
         try:
             t0 = time.monotonic()
             sync_once(cfg, state, woke=woke)
+            wrote = reminders_module.took_writes()
             log.info(
                 "Sync (%s) in %.1fs",
                 "event" if woke else "interval",
