@@ -24,6 +24,10 @@ Claude Code / Codex sessions, and voice exchanges with Claude Voice.
   Claude Code as one reminder: read a live transcript tail, or type under
   `send:` and check the box to have the bridge switch to that tab and type
   your message into the live session — exactly as you would.
+- **Command queue** — `_rb_commands` lets an agent run actions by id
+  (`close: <bead-id>`, `reopen: <bead-id>`, `note: <bead-id> | <text>`) and get
+  an `ok:`/`error:` ack rewritten into the reminder — no checkbox hunting, and
+  notes are appended tamper-safe by the daemon.
 
 The lanes are independent. You can use any without the others.
 
@@ -41,7 +45,8 @@ Daemon (runs every 5s under launchd):
 
 ```bash
 cp launchd/com.jurrejan.reminders-bridge.plist ~/Library/LaunchAgents/com.<you>.reminders-bridge.plist
-# edit paths + Label inside the copied plist
+# edit paths + Label inside the copied plist; make sure the plist's PATH
+# includes bd's dir (e.g. ~/.local/bin) — launchd does NOT use your shell PATH
 launchctl load ~/Library/LaunchAgents/com.<you>.reminders-bridge.plist
 tail -f ~/Library/Logs/reminders-bridge.log
 ```
@@ -54,7 +59,9 @@ Full step-by-step (clean macOS, permissions walkthrough, troubleshooting):
 - macOS with Reminders.app automation granted (System Settings → Privacy
   & Security → Automation).
 - `uv` (Python package manager).
-- `bd` v0.49+ on `$PATH` — only required for the Beads sync lane.
+- `bd` v0.49+ — only required for the Beads sync lane. The launchd daemon
+  resolves it via the **plist's** `EnvironmentVariables` PATH, not your shell's;
+  `rbridge doctor` verifies bd on both (and reports per-lane health).
 - A populated `~/.beads-kanban-projects.json` (beads-kanban writes it
   when you open a project) — only required for the Beads sync lane.
 
@@ -66,6 +73,7 @@ docs/AGENT.md            Directive served into the Reminders agent context
 docs/REFERENCE.md        Full reference (lists, env vars, modes, body XML)
 docs/architecture.mmd    Mermaid module map (source of truth)
 launchd/                 launchd plist template
+testkit/                 Voice-surface MCP replica + isolated agent eval harness
 site/                    SvelteKit docs site (deployed to GitHub Pages)
 ```
 
