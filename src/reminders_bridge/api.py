@@ -5,6 +5,7 @@ Envelope is unwrapped: on `ok:false`, raises APIError(code, message).
 Callers own retry / backoff; this module is pure request/response.
 """
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -56,6 +57,12 @@ class Client:
             raise APIError("NETWORK", str(e.reason)) from e
         except TimeoutError as e:
             raise APIError("TIMEOUT", str(e)) from e
+        except (http.client.HTTPException, OSError) as e:
+            # A live-but-non-API listener on the port (e.g. a Vite dev server)
+            # accepts then drops the connection → RemoteDisconnected, which is an
+            # OSError/HTTPException, not a URLError. Keep the client's contract:
+            # only APIError escapes, so callers (doctor) treat it as unreachable.
+            raise APIError("NETWORK", str(e)) from e
         if not payload.get("ok"):
             err = payload.get("error") or {}
             raise APIError(err.get("code", "UNKNOWN"), err.get("message", "unknown error"))
