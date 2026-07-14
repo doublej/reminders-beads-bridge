@@ -151,6 +151,42 @@ def lint() -> None:
         sys.exit(1)
 
 
+def _daemon_bd_status() -> tuple[bool | None, str]:
+    """Is `bd` resolvable on the launchd daemon's PATH (not the shell's)?
+
+    Returns (True, path) / (False, reason) / (None, undeterminable). A shell-only
+    bd check missed a 2-week reconcile outage — the daemon's launchd PATH lacked
+    ~/.local/bin, so it threw FileNotFoundError while `doctor` (run from a shell
+    that had bd) reported OK. This probes the env the daemon actually runs under.
+    """
+    import glob
+    import plistlib
+    import shutil
+    from pathlib import Path
+
+    matches = glob.glob(
+        str(Path("~/Library/LaunchAgents").expanduser() / "*reminders-bridge*.plist")
+    )
+    if not matches:
+        return None, "no launchd plist in ~/Library/LaunchAgents"
+    try:
+        with open(matches[0], "rb") as f:
+            env = plistlib.load(f).get("EnvironmentVariables", {})
+    except (OSError, plistlib.InvalidFileException):
+        return None, f"could not read {matches[0]}"
+    path = env.get("PATH")
+    if not path:
+        return None, "plist sets no EnvironmentVariables PATH"
+    found = shutil.which("bd", path=path)
+    if found:
+        return True, found
+    return False, (
+        "bd is NOT on the daemon's launchd PATH — reconcile throws "
+        "FileNotFoundError. Add bd's dir (e.g. ~/.local/bin) to the plist "
+        "EnvironmentVariables PATH."
+    )
+
+
 def doctor() -> None:
     cfg = config_module.load()
     print("Config:")
@@ -169,9 +205,17 @@ def doctor() -> None:
         sys.exit(1)
     try:
         version = beads_module.doctor(active[0].path)
-        print(f"  ok — {version}")
-    except RuntimeError as e:
-        print(f"  FAIL: {e}")
+        print(f"  ok (shell) — {version}")
+    except (RuntimeError, FileNotFoundError) as e:
+        print(f"  FAIL (shell): {e}")
+        sys.exit(1)
+    ok, detail = _daemon_bd_status()
+    if ok is True:
+        print(f"  ok (daemon PATH) — bd at {detail}")
+    elif ok is None:
+        print(f"  WARN (daemon PATH) — {detail}")
+    else:
+        print(f"  FAIL (daemon PATH) — {detail}")
         sys.exit(1)
 
     print("\nReminders permission:")
