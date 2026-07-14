@@ -1,6 +1,6 @@
 [project]
 name = "reminders-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sync Beads issues to Apple Reminders (1 bead = 1 reminder, per-project list)"
 authors = [{ name = "JJ" }]
 requires-python = ">=3.12"
