@@ -16,6 +16,30 @@ agent / voice agent — never blur them (see GLOSSARY → "Surfaces"). Full
 glossary: ./GLOSSARY.md
 </vocabulary>
 
+## Design stance (read before proposing any agent-facing change)
+
+The primary driver is the **Claude voice session, which we do not control**: its
+only tool is Apple Reminders CRUD, it can't be given new tools / a new prompt /
+an MCP server, and every write is fire-and-forget (it can't read the result in
+the same turn). The Reminders tunnel exists *because* of this. What follows
+bounds every design:
+
+- **All leverage is daemon-side.** Change what the daemon writes for the agent
+  to read, how it interprets the agent's writes, and how it rewrites reminders
+  in place — never the agent itself. An MCP/API "for capable agents" cannot help
+  the voice agent; it only helps other, controllable agents.
+- **Safety = reversibility + acks, never confirmation.** A check → "are you
+  sure?" → check-again handshake is theater: the agent is executing the user's
+  stated intent and will just satisfy the second check, and no human watches a
+  checkbox mid-call. Make destructive actions *undoable* (snapshot before
+  delete), don't gate them.
+- **Acknowledge via in-place rewrites.** Fire-and-forget writes need an ack the
+  agent reads next turn — rewrite the reminder to `ok:`/`error:`/`sent:`. The
+  nav lane already does this (`fetch:`→`file:`/`blocked:`) and is the template
+  for every agent→daemon action; prefer it over adding checkbox meanings.
+- Prompt-borne safety (docs/AGENT.md rules) degrades with context length, model
+  swaps, and cold starts — prefer daemon-enforced + visible-in-store.
+
 ## Commands
 
 Dev workflow uses `uv`. Installs are implicit via `uv run`.
