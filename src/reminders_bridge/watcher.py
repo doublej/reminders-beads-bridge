@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 
-from Foundation import (  # type: ignore[import-not-found]
+from Foundation import (  # type: ignore[import-not-found, import-untyped]
     NSDate,
     NSNotificationCenter,
     NSObject,
@@ -12,7 +12,7 @@ from Foundation import (  # type: ignore[import-not-found]
 )
 
 try:
-    from EventKit import EKEventStoreChangedNotification  # type: ignore[import-not-found]
+    from EventKit import EKEventStoreChangedNotification  # type: ignore[import-not-found, import-untyped]
 except ImportError:
     EKEventStoreChangedNotification = "EKEventStoreChangedNotification"
 
@@ -61,10 +61,24 @@ def wait(
     didn't, there are no own-notifications to absorb, so we skip the settle
     pre-pump (pure idle overhead) and do not clear `_change` — preserving any
     external edit that landed during the sync so it wakes us immediately.
+
+    When it did write, a change flagged *during* the settle pump is ambiguous:
+    EKEventStoreChangedNotification is store-wide and identity-less, so our own
+    write's notification and a concurrent external edit (e.g. a checkbox toggle)
+    coalesce into the same signal. Clearing unconditionally silently dropped the
+    external edit, deferring it to the lane's idle interval (up to ~30s). Instead
+    we treat a settle-window change as possibly-external and force one
+    confirmatory sync. This cannot busy-loop: syncs are idempotent, so if nothing
+    external actually changed the follow-up writes nothing (`wrote=False`) and the
+    next wait settles cleanly — the cost is one extra sync per self-write cycle,
+    and self-writes only happen when there was real work to do.
     """
     if wrote:
         _pump(settle_s)
+        settled_change = _change.is_set()
         _change.clear()
+        if settled_change:
+            return True
         deadline = time.monotonic() + max(0.0, max_s - settle_s)
     else:
         deadline = time.monotonic() + max_s
