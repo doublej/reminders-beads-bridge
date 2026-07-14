@@ -32,7 +32,10 @@
 		<key>HOME</key>
 		<string>/Users/jurrejan</string>
 		<key>PATH</key>
-		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<!-- ~/.local/bin holds the `bd` CLI; without it the daemon cannot
+		     reconcile beads (FileNotFoundError: 'bd'). launchd does not expand
+		     ~, so the path is absolute. -->
+		<string>/Users/jurrejan/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
 		<key>RBRIDGE_POLL_S</key>
 		<string>5</string>
 	</dict>
