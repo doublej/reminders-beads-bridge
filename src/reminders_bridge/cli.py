@@ -10,6 +10,7 @@ from . import beads as beads_module
 from . import body as body_module
 from . import config as config_module
 from . import daemon as daemon_module
+from . import heartbeat as heartbeat_module
 from . import mailbox as mailbox_module
 from . import navigation as navigation_module
 from . import prime as prime_module
@@ -230,6 +231,17 @@ def doctor() -> None:
         sys.exit(1)
 
     print(f"\nRegistry: {len(projects)} entries, {len(active)} with .beads/")
+
+    print("\nLane health (daemon heartbeat):")
+    hb = heartbeat_module.load()
+    if not hb:
+        print("  no heartbeat yet — is the daemon running the current build?")
+    else:
+        problems = heartbeat_module.stale(hb)
+        for p in problems:
+            print(f"  STALE/ERR — {p}")
+        if not problems:
+            print(f"  ok — {len(hb)} lanes tracked, all fresh")
 
     print("\nbeads-kanban API:")
     client = api_module.Client(base_url=cfg.api_url, timeout_s=cfg.api_timeout_s)

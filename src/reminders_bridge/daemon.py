@@ -16,6 +16,7 @@ from . import dashboard as dashboard_module
 from . import sessions as sessions_module
 from . import config as config_module
 from . import fixer as fixer_module
+from . import heartbeat as heartbeat_module
 from . import link as link_module
 from . import mailbox as mailbox_module
 from . import migrate as migrate_module
@@ -343,6 +344,7 @@ def _safe(name: str, fn, *args, **kwargs):
     try:
         result = fn(*args, **kwargs)
     except Exception as e:
+        heartbeat_module.fail(name, str(e))
         _fail_counts[name] = _fail_counts.get(name, 0) + 1
         _fail_messages[name] = str(e)
         log.warning(
@@ -360,6 +362,7 @@ def _safe(name: str, fn, *args, **kwargs):
                     _fail_counts.pop(n, None)
                     _fail_messages.pop(n, None)
         return None
+    heartbeat_module.ok(name)
     _fail_counts.pop(name, None)
     _fail_messages.pop(name, None)
     return result
@@ -485,15 +488,33 @@ def sync_once(
             )
         if _due("reconcile", now, woke):
             show_completed = settings.get("show_completed", False)
-            for project in visible:
-                with reminders_module.autorelease_pool():
-                    t0 = time.monotonic()
-                    reconcile_project(
-                        project, cfg, state, client, show_completed=show_completed
-                    )
-                    log.info("%s done in %.1fs", project.name, time.monotonic() - t0)
+            _safe(
+                "Reconcile", _run_reconcile, visible, cfg, state, client, show_completed
+            )
+        heartbeat_module.persist()
         reminders_module.reset_store()
         return len(visible)
+
+
+def _run_reconcile(visible, cfg, state, client, show_completed: bool) -> None:
+    """Reconcile every visible project, resilient per-project — one project's
+    unexpected error no longer aborts the rest of the cycle (a single bd failure
+    silently killed all reconciles for two weeks). Re-raise a summary so `_safe`
+    records the failure + escalates."""
+    errs = []
+    for project in visible:
+        with reminders_module.autorelease_pool():
+            t0 = time.monotonic()
+            try:
+                reconcile_project(
+                    project, cfg, state, client, show_completed=show_completed
+                )
+                log.info("%s done in %.1fs", project.name, time.monotonic() - t0)
+            except Exception as e:
+                errs.append(f"{project.name}: {e}")
+                log.exception("Reconcile failed for %s", project.name)
+    if errs:
+        raise RuntimeError("; ".join(errs[:5]))
 
 
 def run() -> None:

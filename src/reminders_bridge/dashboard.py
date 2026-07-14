@@ -17,6 +17,7 @@ import socket
 import time
 from pathlib import Path
 
+from . import heartbeat as heartbeat_module
 from . import reminders as reminders_module
 
 _LIST_NAME = os.getenv("RBRIDGE_DASHBOARD_LIST", "_rb_dashboard")
@@ -107,6 +108,9 @@ def _body() -> str:
             "",
             "(server off — check the 'Dashboard server' setting in _rb_settings to start it)",
         ]
+    problems = heartbeat_module.stale()
+    if problems:
+        lines += ["", "⚠ lane health:"] + [f"  {p}" for p in problems]
     lines += [
         "",
         "At-a-glance view of the bridge: projects, bead counts, recent activity.",
