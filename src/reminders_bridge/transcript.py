@@ -96,8 +96,14 @@ def _text_of(content: object) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def render_tail(path: str, max_msgs: int = 6, max_chars: int = 400) -> str:
-    msgs: list[str] = []
+def render_tail(
+    path: str, max_msgs: int = 6, max_chars: int = 400, last_max_chars: int = 2000
+) -> str:
+    """Recent user/assistant turns. The latest turn gets `last_max_chars` — a
+    review's conclusion (the whole reason to glance at a tab) used to be clipped
+    to 400 chars and decapitated; older turns stay at `max_chars` so scrollback
+    stays compact."""
+    rows: list[tuple[str, str]] = []
     try:
         lines = Path(path).read_text(errors="replace").splitlines()
     except OSError:
@@ -116,10 +122,15 @@ def render_tail(path: str, max_msgs: int = 6, max_chars: int = 400) -> str:
             continue
         text = _text_of(msg.get("content"))
         if text:
-            msgs.append(f"{msg['role']}: {_clip(text, max_chars)}")
-    if not msgs:
+            rows.append((str(msg["role"]), text))
+    if not rows:
         return "(no messages yet)"
-    return "\n\n".join(msgs[-max_msgs:])
+    recent = rows[-max_msgs:]
+    last = len(recent) - 1
+    return "\n\n".join(
+        f"{role}: {_clip(text, last_max_chars if i == last else max_chars)}"
+        for i, (role, text) in enumerate(recent)
+    )
 
 
 def _clip(text: str, limit: int) -> str:
