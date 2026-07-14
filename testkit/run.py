@@ -41,6 +41,20 @@ ALLOWED = [f"mcp__reminders__{n}" for n in (
     "reminder_update_v0", "reminder_delete_v0", "user_time_v0",
 )]
 
+# Voice-parity system prompt: replaces Claude Code's coding-agent persona with
+# the phone's situation and lets the agent fetch the LIVE directive itself
+# (from the real !_rb_readme), the same way the voice agent does — rather than
+# injecting a repo copy. The directive owns the behaviour rules (brevity,
+# <bb:notes> discipline, gates); this only bootstraps the read.
+VOICE_BOOTSTRAP = (
+    "You are Claude, helping the user by voice through the Apple Reminders app "
+    "on their Apple device. Your only tools are the Reminders tools. Before your "
+    "first action, read the reminder list named `!_rb_readme` — it holds your "
+    "operating directive for this workspace — then follow it exactly for the "
+    "rest of the conversation. Everything you say is spoken aloud to the user, "
+    "so keep it short."
+)
+
 
 def provision() -> Path:
     """Write the agent cwd + its config files (idempotent, absolute paths).
@@ -139,7 +153,12 @@ def _flatten_result(content: Any) -> str:
     return ""
 
 
-def run(prompt: str, model: str | None = None, timeout: int = 180) -> dict[str, Any]:
+def run(
+    prompt: str,
+    model: str | None = None,
+    timeout: int = 180,
+    directive: bool = False,
+) -> dict[str, Any]:
     agent = provision()
     cmd = [
         "claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
@@ -149,6 +168,10 @@ def run(prompt: str, model: str | None = None, timeout: int = 180) -> dict[str, 
         "--allowedTools", *ALLOWED,
         "--disallowedTools", *DISALLOWED,
     ]
+    if directive:
+        # Voice-parity mode: swap Claude Code's persona for the phone's framing
+        # and let the agent read the LIVE !_rb_readme directive itself.
+        cmd += ["--system-prompt", VOICE_BOOTSTRAP]
     if model:
         cmd += ["--model", model]
     # ENABLE_TOOL_SEARCH=false loads all 6 MCP tools directly (no deferred
@@ -174,15 +197,17 @@ def run(prompt: str, model: str | None = None, timeout: int = 180) -> dict[str, 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run the isolated voice-surface agent.")
     ap.add_argument("prompt", nargs="?", help="prompt to send (default: stdin)")
-    ap.add_argument("--model", help="model override (e.g. claude-sonnet-5)")
+    ap.add_argument("--model", help="model override (e.g. sonnet)")
     ap.add_argument("--timeout", type=int, default=180)
+    ap.add_argument("--directive", action="store_true",
+                    help="voice-parity mode: phone framing + read the live !_rb_readme")
     ap.add_argument("--json", action="store_true", help="emit the structured result")
     ap.add_argument("--raw", action="store_true", help="keep raw_events in --json")
     args = ap.parse_args()
     prompt = args.prompt if args.prompt is not None else sys.stdin.read()
     if not prompt.strip():
         ap.error("no prompt given")
-    r = run(prompt, args.model, args.timeout)
+    r = run(prompt, args.model, args.timeout, args.directive)
     if args.json:
         if not args.raw:
             r.pop("raw_events", None)
