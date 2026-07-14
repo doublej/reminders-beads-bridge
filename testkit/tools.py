@@ -12,81 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-_PRIORITY = {"type": "string", "enum": ["none", "low", "medium", "high"]}
-
-_ALARM = {
-    "type": "object",
-    "properties": {
-        "type": {"type": "string", "enum": ["absolute", "relative"]},
-        "date": {"type": "string", "description": "ISO 8601 absolute alarm time."},
-        "secondsBefore": {
-            "type": "number",
-            "description": "Seconds before the due date (relative alarms).",
-        },
-    },
-    "required": ["type"],
-}
-
-_RECURRENCE = {
-    "type": "object",
-    "properties": {
-        "rrule": {"type": "string"},
-        "humanReadableFrequency": {"type": "string"},
-        "frequency": {"type": "string", "enum": ["daily", "weekly", "monthly", "yearly"]},
-        "interval": {"type": "integer"},
-        "daysOfWeek": {"type": "array", "items": {"type": "string"}},
-        "dayOfMonth": {"type": "integer"},
-        "position": {"type": "integer"},
-        "months": {"type": "array", "items": {"type": "integer"}},
-        "end": {
-            "type": "object",
-            "properties": {
-                "type": {"type": "string", "enum": ["count", "until"]},
-                "count": {"type": "integer"},
-                "until": {"type": "string"},
-            },
-        },
-    },
-    "required": ["frequency"],
-}
-
-_ITEM = {
-    "type": "object",
-    "properties": {
-        "title": {"type": "string"},
-        "notes": {"type": "string"},
-        "url": {"type": "string"},
-        "dueDate": {"type": "string", "description": "ISO 8601."},
-        "dueDateIncludesTime": {"type": "boolean"},
-        "priority": _PRIORITY,
-        "completionDate": {"type": "string"},
-        "alarms": {"type": "array", "items": _ALARM},
-        "recurrence": _RECURRENCE,
-    },
-    "required": ["title"],
-}
-
-_UPDATE = {
-    "type": "object",
-    "properties": {
-        "id": {"type": "string"},
-        "title": {"type": "string"},
-        "notes": {"type": "string"},
-        "url": {"type": "string"},
-        "priority": _PRIORITY,
-        "dueDate": {"type": ["string", "null"]},
-        "dueDateIncludesTime": {"type": "boolean"},
-        "completionDate": {
-            "type": ["string", "null"],
-            "description": "Set = complete, null = mark incomplete.",
-        },
-        "listId": {"type": "string", "description": "Move the reminder to this list."},
-        "alarms": {"type": "array", "items": _ALARM},
-        "recurrence": _RECURRENCE,
-    },
-    "required": ["id"],
-}
-
+from schemas import ITEM, UPDATE
 
 SPECS: list[dict[str, Any]] = [
     {
@@ -155,7 +81,7 @@ SPECS: list[dict[str, Any]] = [
                                 "type": "string",
                                 "description": "Empty or omitted = default list.",
                             },
-                            "reminders": {"type": "array", "items": _ITEM},
+                            "reminders": {"type": "array", "items": ITEM},
                         },
                         "required": ["reminders"],
                     },
@@ -176,7 +102,7 @@ SPECS: list[dict[str, Any]] = [
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {"reminderUpdates": {"type": "array", "items": _UPDATE}},
+            "properties": {"reminderUpdates": {"type": "array", "items": UPDATE}},
             "required": ["reminderUpdates"],
         },
     },
