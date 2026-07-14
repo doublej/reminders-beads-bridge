@@ -97,12 +97,17 @@ def _text_of(content: object) -> str:
 
 
 def render_tail(
-    path: str, max_msgs: int = 6, max_chars: int = 400, last_max_chars: int = 2000
+    path: str,
+    max_msgs: int = 6,
+    max_chars: int = 400,
+    last_max_chars: int = 2000,
+    flatten: bool = True,
 ) -> str:
     """Recent user/assistant turns. The latest turn gets `last_max_chars` — a
     review's conclusion (the whole reason to glance at a tab) used to be clipped
     to 400 chars and decapitated; older turns stay at `max_chars` so scrollback
-    stays compact."""
+    stays compact. `flatten=False` (the expanded view) keeps line breaks so code
+    and lists survive."""
     rows: list[tuple[str, str]] = []
     try:
         lines = Path(path).read_text(errors="replace").splitlines()
@@ -128,11 +133,11 @@ def render_tail(
     recent = rows[-max_msgs:]
     last = len(recent) - 1
     return "\n\n".join(
-        f"{role}: {_clip(text, last_max_chars if i == last else max_chars)}"
+        f"{role}: {_clip(text, last_max_chars if i == last else max_chars, flatten)}"
         for i, (role, text) in enumerate(recent)
     )
 
 
-def _clip(text: str, limit: int) -> str:
-    flat = " ".join(text.split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+def _clip(text: str, limit: int, flatten: bool = True) -> str:
+    s = " ".join(text.split()) if flatten else text.strip()
+    return s if len(s) <= limit else s[: limit - 1] + "…"

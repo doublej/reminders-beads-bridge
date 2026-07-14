@@ -14,13 +14,17 @@ from . import ghostty as ghostty_module
 from . import transcript as transcript_module
 
 _SEND_RE = re.compile(r"(?mi)^[ \t]*send:[ \t]*")
+_EXPAND_RE = re.compile(r"(?mi)^[ \t]*expand:[ \t]*$")
+_COLLAPSE_RE = re.compile(r"(?mi)^[ \t]*collapse:[ \t]*$")
 _HELP = (
     "SEND = write under `send:` AND complete this reminder in one action — the "
     "completion is the trigger. Agents: set the text and `completed: true` in a "
     "single update; completing first sends empty. STAGE = write under `send:` and "
     "leave it unchecked (just a draft). On send the bridge switches Ghostty to "
     "this tab and types the message in. "
-    "(Needs the tab on the active Space + Accessibility permission for the bridge.)"
+    "(Needs the tab on the active Space + Accessibility permission for the bridge.)\n"
+    "EXPAND = add a line `expand:` (unchecked, no completion needed) to swap the "
+    "transcript for the full recent session; `collapse:` shrinks it back."
 )
 
 
@@ -31,7 +35,25 @@ def title(tab: ghostty_module.Tab, session: "transcript_module.Session | None") 
 
 def parse_send(body: str) -> str:
     parts = _SEND_RE.split(body)
-    return parts[-1].strip() if len(parts) > 1 else ""
+    if len(parts) <= 1:
+        return ""
+    # Drop bare control-verb lines so `expand:`/`collapse:` are never typed into
+    # the live tab, even if the agent writes them inside the send region.
+    kept = [
+        ln for ln in parts[-1].splitlines()
+        if not _EXPAND_RE.match(ln) and not _COLLAPSE_RE.match(ln)
+    ]
+    return "\n".join(kept).strip()
+
+
+def parse_controls(body: str) -> str:
+    """Return the transcript control the agent requested: 'collapse' | 'expand' |
+    ''. `collapse:` wins over `expand:` when both are present (explicit shrink)."""
+    if _COLLAPSE_RE.search(body):
+        return "collapse"
+    if _EXPAND_RE.search(body):
+        return "expand"
+    return ""
 
 
 def _render_turns(turns: list[dict]) -> str:
@@ -46,11 +68,21 @@ def compose(
     turns: list[dict],
     carry_send: str = "",
     last_error: str = "",
+    expanded: bool = False,
 ) -> str:
     sid = session.session_id if session else "-"
     status = session.status if session and session.status else "?"
     name = session.title if session and session.title else "(untitled)"
-    tail = transcript_module.render_tail(session.path) if session else "(no session)"
+    if not session:
+        tail, header = "(no session)", "──── transcript (live · read-only) ────"
+    elif expanded:
+        tail = transcript_module.render_tail(
+            session.path, max_msgs=15, max_chars=2000, last_max_chars=6000, flatten=False
+        )
+        header = "──── transcript (live · read-only · EXPANDED — write `collapse:` to shrink) ────"
+    else:
+        tail = transcript_module.render_tail(session.path)
+        header = "──── transcript (live · read-only · write `expand:` for the full session) ────"
     lines = [
         f"tab: {name}",
         f"project: {tab.project}    status: {status}",
@@ -58,7 +90,7 @@ def compose(
         f"tty: {tab.tty}    pid: {tab.pid}    mode: {tab.mode}",
         f"session: {sid}",
         "",
-        "──── transcript (live · read-only) ────",
+        header,
         tail,
         "",
         "──── sent ────",

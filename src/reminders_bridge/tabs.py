@@ -52,7 +52,9 @@ def _now() -> str:
 
 
 def _entry(tabs: dict, key: str) -> dict:
-    return tabs.setdefault(key, {"reminder_id": "", "turns": [], "last_error": ""})
+    return tabs.setdefault(
+        key, {"reminder_id": "", "turns": [], "last_error": "", "expanded": False}
+    )
 
 
 def _try_send(ent: dict, session, payload: str) -> None:
@@ -74,11 +76,18 @@ def _sync_tab(tab, state: dict, by_id: dict, batch, new_keys: list[str]) -> None
     ent = _entry(state, key)
     session = transcript_module.resolve(tab.pid, tab.cwd)
     rem = by_id.get(ent["reminder_id"])
+    control = tabsbody_module.parse_controls(rem.body) if rem else ""
+    if control == "expand":
+        ent["expanded"] = True
+    elif control == "collapse":
+        ent["expanded"] = False
     carry = tabsbody_module.parse_send(rem.body) if rem else ""
     if rem and rem.completed and carry:
         _try_send(ent, session, carry)
         carry = carry if ent["last_error"] else ""
-    body = tabsbody_module.compose(tab, session, ent["turns"], carry, ent.get("last_error", ""))
+    body = tabsbody_module.compose(
+        tab, session, ent["turns"], carry, ent.get("last_error", ""), ent.get("expanded", False)
+    )
     title = tabsbody_module.title(tab, session)
     if rem is None:
         batch.creates.append({"name": title, "body": body, "priority": 1})
