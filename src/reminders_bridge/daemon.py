@@ -12,6 +12,7 @@ from . import api as api_module
 from . import beads as beads_module
 from . import body as body_module
 from . import captures as captures_module
+from . import commands as commands_module
 from . import dashboard as dashboard_module
 from . import sessions as sessions_module
 from . import config as config_module
@@ -417,6 +418,7 @@ _LANE_EVERY_S: dict[str, float] = {
     "tabs": 60.0,
     "triggers": 30.0,
     "mailbox": 60.0,
+    "commands": 15.0,
     "reconcile": 10.0,
 }
 _lane_last: dict[str, float] = {}
@@ -481,6 +483,8 @@ def sync_once(
             _safe("Trigger lists sync", _run_triggers)
         if _due("mailbox", now, woke):
             _safe("Mailbox sync", mailbox_module.sync)
+        if _due("commands", now, woke):
+            _safe("Commands", commands_module.sync, visible)
         if projects_due:
             _safe(
                 "Apply hides", projects_list_module.apply_hides,

@@ -82,6 +82,22 @@ def compose(issue: beads_module.Issue, current: str | None = None) -> str:
     return "\n\n".join(parts)
 
 
+def append_note(body: str, text: str) -> str | None:
+    """Append `text` inside the `<bb:notes>` block, preserving every other block.
+
+    The daemon-owned, tamper-safe way to add to a bead's notes (used by the
+    command lane) — the agent never has to read-modify-write the whole opaque
+    body. Returns None if there is no `<bb:notes>` block (caller acks an error
+    rather than risk corrupting the body). Never raises.
+    """
+    m = _NOTES_RE.search(body)
+    if not m:
+        return None
+    existing = m.group("body")
+    joined = f"{existing}\n{text}" if existing.strip() else text
+    return f"{body[: m.start()]}<bb:notes>\n{joined}\n</bb:notes>{body[m.end() :]}"
+
+
 def consume_agent_markers(body: str, dispatch: Callable[[dict[str, str]], str]) -> str:
     """Replace each `!agent [args]` line in body via dispatch(parsed_args)→tag."""
     def _sub(m: re.Match) -> str:
