@@ -118,6 +118,7 @@ Load-bearing invariants:
 - **controls** (`settings.py`, `projects_list.py`, `readme.py`, `activity.py`, `dashboard.py`) — the daemon-owned `_rb_settings` / `_rb_beads_projects` / `!_rb_readme` / `_rb_activity` / `_rb_dashboard` lists (Sync rules below).
 - **dashboard endpoint** (`snapshot.py`, `dashpages.py`, `server.py`, `dashboard.py`, `serverctl.py`) — read-only HTTP at-a-glance view + drill-down (`/`, `/project/<name>`, `/sessions`, `/tabs`, `/voice`, `/activity`), compact markdown or `?format=json`. `snapshot.py` assembles each view (files/`bd`/`ps` + read-only EventKit for sessions); `dashpages.py` renders markdown; `server.py` routes; `dashboard.py` mints the rotating token + surfaces the live URL in `_rb_dashboard`; `serverctl.py` is the daemon-owned `serve` subprocess, toggled by the `Dashboard server` setting. Read-only — writes stay in rbridge. See `docs/REFERENCE.md` → "Dashboard endpoint".
 - **agent dispatch** (`agent_marker.py`) — `!agent` in `<bb:notes>` → enqueue a coding session; rewritten to `<bb:agent …/>`.
+- **command queue** (`commands.py`, `body.py`) — `_rb_commands`; a `close:`/`reopen:`/`note:` reminder is run against the addressed bead and rewritten in place to `ok:`/`error:` (the nav-lane pattern → ack/nack, no checkbox overload). See `docs/AGENT.md` → `_rb_commands`.
 
 ## Sync rules (the editing contract)
 
