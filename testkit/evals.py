@@ -1,146 +1,169 @@
 #!/usr/bin/env python3
-"""Starter evals for the voice-surface replica agent.
+"""Executable voice scenarios, driven against the real agent (Sonnet by default).
 
-Each eval drives the isolated agent (run.run) with a prompt and asserts on the
-captured tool calls + the spoken utterance. Mutating evals use a uniquely-named
-throwaway list and delete it in teardown, so a run leaves Reminders as it found
-it. Extend this list with bridge-coupling cases (see README → "Daemon-coupling
-evals") once you have a dedicated test beads project.
+Each case runs the isolated agent on a phone-style prompt (see scenarios.md) and
+verifies the *effect* by reading the real Reminders store back — not just the
+tool calls. Mutating cases use one throwaway list, wiped in setup and teardown,
+so a run leaves Reminders as it found it.
 
-    uv run --extra testkit python testkit/evals.py          # all
-    uv run --extra testkit python testkit/evals.py isolation # one
+    uv run --extra testkit python testkit/evals.py                 # all
+    uv run --extra testkit python testkit/evals.py close reprio    # subset
+    RBRIDGE_AGENT_MODEL=opus uv run --extra testkit python testkit/evals.py
 """
 
 from __future__ import annotations
 
-import sys
-from dataclasses import dataclass, field
-from typing import Any, Callable
-
 from reminders_bridge import reminders as rem  # type: ignore[import-untyped]
 
-import run
+import ekstore
+from evalkit import (
+    Eval,
+    all_of,
+    creates,
+    main,
+    only_reminder_tools,
+    read_directive,
+    speakable,
+    used,
+)
 
-_BANNED_OPENERS = (
-    "sure", "got it", "of course", "perfect", "i'll", "let me", "happy to",
-    "i have", "i've", "here", "okay", "great",
+LIST = "RbTestkitEval"
+
+
+# ── throwaway-list helpers ──────────────────────────────────────────────────
+def fresh() -> None:
+    rem.delete_list(LIST)
+    rem.create_list(LIST)
+
+
+def wipe() -> None:
+    rem.delete_list(LIST)
+
+
+def seed(title: str, notes: str = "") -> None:
+    fresh()
+    lid = next(x["id"] for x in ekstore.list_lists(LIST)["lists"] if x["title"] == LIST)
+    ekstore.create([{"listId": lid, "reminders": [{"title": title, "notes": notes}]}])
+
+
+def _items(status: str = "incomplete") -> list[dict]:
+    groups = ekstore.search(listName=LIST, status=status)["reminder_lists"]
+    return [r for g in groups for r in g["reminders"]]
+
+
+def _find(sub: str, status: str = "incomplete") -> dict | None:
+    return next((r for r in _items(status) if sub.lower() in r["title"].lower()), None)
+
+
+# ── effect checks (read the store back) ─────────────────────────────────────
+def one_per_item(r):
+    items = creates(r)
+    if len(items) < 3:
+        return f"expected ≥3 reminders, got {[i.get('title') for i in items]}"
+    if any("\n" in (i.get("notes") or "") for i in items):
+        return "packed items into a bulleted note instead of one each"
+    return None if len(_items()) >= 3 else "items did not land in the list"
+
+
+def single_landed(sub):
+    def check(r):
+        items = _items()
+        if len(items) != 1:
+            return f"expected exactly 1 reminder, got {[i['title'] for i in items]}"
+        return None if sub in items[0]["title"].lower() else f"title missing {sub!r}"
+    return check
+
+
+def now_high(sub):
+    def check(r):
+        it = _find(sub)
+        if it is None:
+            return f"{sub!r} not found (did it get renamed/moved?)"
+        return None if it["priority"] == "high" else f"priority is {it['priority']}"
+    return check
+
+
+def now_closed(sub):
+    def check(r):
+        if _find(sub, status="incomplete") is not None:
+            return f"{sub!r} is still incomplete"
+        return None if _find(sub, status="completed") else f"{sub!r} vanished"
+    return check
+
+
+def note_added_intact(sub, needle):
+    def check(r):
+        it = _find(sub)
+        if it is None:
+            return f"{sub!r} not found"
+        notes = it.get("notes", "")
+        if needle.lower() not in notes.lower():
+            return f"note {needle!r} not written"
+        if "<bb:meta>" not in notes or "<bb:desc>" not in notes:
+            return "clobbered <bb:meta>/<bb:desc> (tamper) instead of editing notes"
+        return None
+    return check
+
+
+_TICKET_BODY = (
+    "<bb:meta>[bug · p1 · open]</bb:meta>\n\n"
+    "<bb:desc>\nFilters reset on tab switch.\n</bb:desc>\n\n"
+    "<bb:notes>\n</bb:notes>\n"
 )
 
 
-@dataclass
-class Eval:
-    name: str
-    prompt: str
-    check: Callable[[dict[str, Any]], str | None]  # return None=pass, str=reason
-    setup: Callable[[], None] = lambda: None
-    teardown: Callable[[], None] = lambda: None
-    tags: list[str] = field(default_factory=list)
-
-
-def _only_reminder_tools(r: dict[str, Any]) -> str | None:
-    stray = [t["name"] for t in r["tool_calls"] if not t["name"].startswith("mcp__reminders__")]
-    return f"used non-reminder tools: {stray}" if stray else None
-
-
-def _creates(r: dict[str, Any]) -> list[dict[str, Any]]:
-    out = []
-    for t in r["tool_calls"]:
-        if t["name"].endswith("reminder_create_v0"):
-            for g in (t["input"] or {}).get("reminderLists", []):
-                out.extend(g.get("reminders", []))
-    return out
-
-
-def _one_per_item(r: dict[str, Any]) -> str | None:
-    items = _creates(r)
-    if len(items) < 3:
-        return f"expected ≥3 separate reminders, got {len(items)}: {[i.get('title') for i in items]}"
-    bulleted = [i for i in items if "\n" in (i.get("notes") or "")]
-    if bulleted:
-        return "packed items into a bulleted note instead of one reminder each"
-    return _only_reminder_tools(r)
-
-
-def _speakable(r: dict[str, Any]) -> str | None:
-    u = (r["utterance"] or "").strip()
-    if not u:
-        return "no utterance"
-    if len(u) > 240:
-        return f"utterance too long to speak ({len(u)} chars)"
-    low = u.lower()
-    hit = next((o for o in _BANNED_OPENERS if low.startswith(o)), None)
-    if hit:
-        return f"opens with filler {hit!r} (bad for a spoken receipt)"
-    return _only_reminder_tools(r)
-
-
-_LIST = "RbTestkitEval"
-
-
-def _mk_list() -> None:
-    rem.create_list(_LIST)
-
-
-def _rm_list() -> None:
-    rem.delete_list(_LIST)
-
-
 EVALS = [
+    # ── read (safe; assert behaviour, not live content) ──
     Eval(
-        name="isolation",
+        name="list_count",
         prompt="How many reminder lists do I have? Just the number.",
-        check=_only_reminder_tools,
+        check=all_of(only_reminder_tools, lambda r: used(r, "reminder_list_search_v0")),
         tags=["read"],
     ),
     Eval(
-        name="one_per_item",
-        prompt=f"Add milk, eggs and bread to my {_LIST} list.",
-        check=_one_per_item,
-        setup=_mk_list,
-        teardown=_rm_list,
-        tags=["write"],
+        name="whats_open",
+        prompt="What's open across my projects? Keep it short.",
+        check=all_of(only_reminder_tools, read_directive, speakable,
+                     lambda r: used(r, "reminder_search_v0")),
+        tags=["read"],
+    ),
+    # ── write (throwaway list; assert the effect) ──
+    Eval(
+        name="dump_three",
+        prompt=f"Add milk, eggs and bread to my {LIST} list.",
+        check=all_of(only_reminder_tools, one_per_item),
+        setup=fresh, teardown=wipe, tags=["write"],
     ),
     Eval(
-        name="speakable_receipt",
-        prompt=f"Add 'buy stamps' to my {_LIST} list.",
-        check=_speakable,
-        setup=_mk_list,
-        teardown=_rm_list,
-        tags=["write"],
+        name="capture_single",
+        prompt=f"Add 'renew the domain' to my {LIST} list.",
+        check=all_of(only_reminder_tools, single_landed("domain")),
+        setup=fresh, teardown=wipe, tags=["write"],
+    ),
+    Eval(
+        name="reprioritize",
+        prompt=f"In my {LIST} list, bump the sleep-wake crash to high priority.",
+        check=all_of(only_reminder_tools, lambda r: used(r, "reminder_update_v0"),
+                     now_high("sleep-wake crash")),
+        setup=lambda: seed("bd-77: sleep-wake crash"), teardown=wipe, tags=["write"],
+    ),
+    Eval(
+        name="close",
+        prompt=f"Close the csv export bug in my {LIST} list.",
+        check=all_of(only_reminder_tools, speakable,
+                     lambda r: used(r, "reminder_update_v0"), now_closed("csv export")),
+        setup=lambda: seed("bd-88: csv export bug"), teardown=wipe, tags=["write"],
+    ),
+    Eval(
+        name="add_note_preserve",
+        prompt=f"On the filters reset ticket in {LIST}, note that it only happens on Safari.",
+        check=all_of(only_reminder_tools,
+                     note_added_intact("filters reset", "safari")),
+        setup=lambda: seed("bd-99: filters reset", _TICKET_BODY),
+        teardown=wipe, tags=["write"],
     ),
 ]
 
 
-def run_one(ev: Eval) -> bool:
-    ev.setup()
-    try:
-        result = run.run(ev.prompt)
-        reason = None if result.get("is_error") is False else (
-            f"agent errored: {result.get('stderr', '')[:200]}"
-        )
-        reason = reason or ev.check(result)
-    finally:
-        ev.teardown()
-    mark = "PASS" if reason is None else "FAIL"
-    print(f"[{mark}] {ev.name}")
-    if reason:
-        print(f"       {reason}")
-    else:
-        print(f"       tools={[t['name'].split('__')[-1] for t in result['tool_calls']]}")
-        print(f"       said: {(result['utterance'] or '')[:100]!r}")
-    return reason is None
-
-
-def main() -> None:
-    wanted = sys.argv[1:]
-    evals = [e for e in EVALS if not wanted or e.name in wanted]
-    if not evals:
-        print(f"no eval matches {wanted}; have: {[e.name for e in EVALS]}")
-        sys.exit(2)
-    passed = sum(run_one(e) for e in evals)
-    print(f"\n{passed}/{len(evals)} passed")
-    sys.exit(0 if passed == len(evals) else 1)
-
-
 if __name__ == "__main__":
-    main()
+    main(EVALS)

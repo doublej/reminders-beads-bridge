@@ -40,6 +40,27 @@ Context is kept clean too: the cwd is outside any repo (no project `CLAUDE.md`)
 and `--setting-sources project,local` drops the global user `CLAUDE.md`. The
 real login is left untouched so OAuth refresh works.
 
+## How the agent is briefed (voice-parity mode)
+
+The phone's voice agent gets its directive by **reading the live `!_rb_readme`
+list** (the daemon pins `docs/AGENT.md` there). To match that exactly, `run.py`
+with `directive=True` (the eval default; `--directive` on the CLI):
+
+- **replaces** Claude Code's coding-agent system prompt with a short voice
+  bootstrap (`VOICE_BOOTSTRAP`): "you're in Apple Reminders, by voice, read
+  `!_rb_readme` first, replies are spoken";
+- **does not inject** any repo copy of the directive — the agent fetches the
+  *live* `!_rb_readme` itself via `reminder_search_v0`, the same bytes and the
+  same path as the phone. The live directive then owns brevity, the `<bb:notes>`
+  discipline, and the destructive gates.
+
+`evalkit.read_directive` asserts this fetch happened, so the briefing step is
+itself under test. Set `RBRIDGE_DIRECTIVE=0` (or omit `--directive`) to test the
+bare tool surface with no directive instead.
+
+The one thing this can't replicate is the phone's exact base system prompt
+(the Claude app assistant vs. our bootstrap) — see "Known divergences".
+
 ## The agent's text output is SPOKEN
 
 In real use the agent's words are read aloud, and forming them is slow. So
@@ -110,3 +131,9 @@ project** — never a live one, since these create/close real beads:
   fields are ignored rather than erroring. The bridge itself uses none of these.
 - This mirrors the **chat** Claude surface's reminder tools. If your voice flow
   runs a different surface, confirm its tool set matches.
+- **Base system prompt.** Parity mode swaps in `VOICE_BOOTSTRAP` (a short voice
+  framing) in place of Claude Code's coding persona, but that is our
+  approximation of the phone's assistant prompt, not the real one. If you can
+  capture the phone's actual system prompt / custom instruction, drop it into
+  `VOICE_BOOTSTRAP` for exact parity. The model also defaults to Sonnet
+  (`RBRIDGE_AGENT_MODEL`) — set it to whatever the phone runs.

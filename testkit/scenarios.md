@@ -154,11 +154,16 @@ Too much noise from one project today.
 ## How to run these
 
 ```bash
-# a single scenario
-uv run --extra testkit python testkit/run.py "What's open across my projects?"
+# a single scenario, voice-parity mode (reads the live !_rb_readme first)
+uv run --extra testkit python testkit/run.py --directive "What's open across my projects?"
 
-# turn a batch into pass/fail checks — see evals.py for the pattern.
-# [read] scenarios are safe as-is; [write]/[bridge] need a throwaway list or
-# `bd init` project + teardown; [risky] ones should be dry-run or pointed at a
-# scratch session, never live tabs/settings.
+# the executable subset as pass/fail checks (Sonnet, parity mode by default)
+uv run --extra testkit python testkit/evals.py            # all
+uv run --extra testkit python testkit/evals.py close      # one
 ```
+
+`evals.py` already encodes the runnable `[read]`/`[write]` scenarios below and
+verifies each by reading the store back. `[bridge]` needs a throwaway `bd init`
+project + teardown; `[risky]` ones (sessions/restart/live tabs) should be
+dry-run or pointed at a scratch target, never live. Agent model is Sonnet
+(`RBRIDGE_AGENT_MODEL`); parity mode is on unless `RBRIDGE_DIRECTIVE=0`.
