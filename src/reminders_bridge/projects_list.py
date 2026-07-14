@@ -5,6 +5,7 @@ from pathlib import Path
 
 from . import activity as activity_module
 from . import mailbox as mailbox_module
+from . import noteguard as noteguard_module
 from . import projects as projects_module
 from . import reminders as reminders_module
 from . import state as state_module
@@ -79,6 +80,17 @@ def apply_hides(
                 "refusing to delete voice list %r via project-hide path",
                 project.list_name,
             )
+            continue
+        try:
+            snap = noteguard_module.snapshot_list(
+                project.list_name, f"hide {project.name}"
+            )
+            if snap is not None:
+                log.info("Snapshotted %s → %s before hide", project.name, snap)
+        except OSError as e:
+            # Reversibility over destruction: don't delete notes we couldn't
+            # save. Skip this cycle; retry next.
+            log.warning("Snapshot before hiding %s failed, skipping: %s", project.name, e)
             continue
         try:
             if reminders_module.delete_list(project.list_name):
