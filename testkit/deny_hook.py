@@ -9,6 +9,7 @@ the MCP-namespaced tools from our "reminders" server: mcp__reminders__*.
 """
 
 import json
+import os
 import sys
 
 ALLOW_PREFIX = "mcp__reminders__"
@@ -21,6 +22,10 @@ def main() -> None:
         data = {}
     name = data.get("tool_name", "")
     allow = name.startswith(ALLOW_PREFIX)
+    log = os.environ.get("RBRIDGE_HOOK_LOG")
+    if log:
+        with open(log, "a") as f:
+            f.write(f"{'ALLOW' if allow else 'DENY '} {name}\n")
     decision = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

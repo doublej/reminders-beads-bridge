@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Drive an isolated Claude Code agent that has ONLY the voice reminder surface.
 
-The agent runs with a clean CLAUDE_CONFIG_DIR (no global/project CLAUDE.md), a
-strict MCP config exposing just our replica server, a built-in denylist, and a
-PreToolUse hook that hard-blocks anything outside mcp__reminders__*. So it can
-reach for nothing but the six replica tools — no Bash, Read, web, or calendar to
-paper over gaps, exactly like the phone.
+The agent runs with no CLAUDE.md context (--setting-sources drops the global
+user memory; cwd sits outside any repo), a strict MCP config exposing just our
+replica server, a built-in denylist, and a PreToolUse hook that hard-blocks
+anything outside mcp__reminders__*. So it can reach for nothing but the six
+replica tools — no Bash, Read, web, or calendar to paper over gaps, exactly like
+the phone. The real login (keychain/credentials) is left untouched so OAuth
+refresh works natively.
 
 The agent's text output is what a voice user would HEAR, so it's surfaced as the
 first-class ``utterance``; tool calls are captured separately for assertions.
@@ -31,9 +33,8 @@ HOME = Path(os.environ.get("RBRIDGE_TESTKIT_HOME", Path.home() / ".rbridge-testk
 
 # Built-ins hidden from the model (the hook is the hard backstop for the rest).
 DISALLOWED = [
-    "Bash", "BashOutput", "KillShell", "Read", "Write", "Edit", "MultiEdit",
-    "NotebookEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "Task",
-    "TodoWrite", "ExitPlanMode", "SlashCommand",
+    "Bash", "BashOutput", "KillShell", "Read", "Write", "Edit", "NotebookEdit",
+    "Glob", "Grep", "WebFetch", "WebSearch", "Task", "TodoWrite", "ExitPlanMode",
 ]
 ALLOWED = [f"mcp__reminders__{n}" for n in (
     "reminder_list_search_v0", "reminder_search_v0", "reminder_create_v0",
@@ -41,10 +42,14 @@ ALLOWED = [f"mcp__reminders__{n}" for n in (
 )]
 
 
-def provision() -> tuple[Path, Path]:
-    """Write the isolated config dir + agent cwd (idempotent, absolute paths)."""
-    cfg, agent = HOME / "config", HOME / "agent"
-    cfg.mkdir(parents=True, exist_ok=True)
+def provision() -> Path:
+    """Write the agent cwd + its config files (idempotent, absolute paths).
+
+    The cwd lives outside any repo so no project/local CLAUDE.md is discovered;
+    --setting-sources then drops the global user CLAUDE.md at run time. The real
+    login is used as-is (no config-dir override) so OAuth stays valid.
+    """
+    agent = HOME / "agent"
     agent.mkdir(parents=True, exist_ok=True)
     (agent / "reminders.mcp.json").write_text(
         json.dumps(
@@ -82,11 +87,11 @@ def provision() -> tuple[Path, Path]:
             indent=2,
         )
     )
-    return cfg, agent
+    return agent
 
 
 def _parse(stdout: str, stderr: str, code: int) -> dict[str, Any]:
-    events, utterances, tool_calls, result = [], [], [], None
+    events, utterances, tool_calls, tool_results, result = [], [], [], [], None
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -102,6 +107,10 @@ def _parse(stdout: str, stderr: str, code: int) -> dict[str, Any]:
                     utterances.append(c["text"].strip())
                 elif c.get("type") == "tool_use":
                     tool_calls.append({"name": c.get("name"), "input": c.get("input")})
+        elif ev.get("type") == "user":
+            for c in ev.get("message", {}).get("content", []):
+                if isinstance(c, dict) and c.get("type") == "tool_result":
+                    tool_results.append(_flatten_result(c.get("content")))
         elif ev.get("type") == "result":
             result = ev
     result = result or {}
@@ -109,6 +118,7 @@ def _parse(stdout: str, stderr: str, code: int) -> dict[str, Any]:
         "utterance": result.get("result") or (utterances[-1] if utterances else ""),
         "utterances": utterances,
         "tool_calls": tool_calls,
+        "tool_results": tool_results,
         "num_turns": result.get("num_turns"),
         "duration_ms": result.get("duration_ms"),
         "is_error": bool(result.get("is_error", code != 0)),
@@ -118,18 +128,32 @@ def _parse(stdout: str, stderr: str, code: int) -> dict[str, Any]:
     }
 
 
+def _flatten_result(content: Any) -> str:
+    """tool_result content can be a string or a list of text blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            c.get("text", "") for c in content if isinstance(c, dict)
+        )
+    return ""
+
+
 def run(prompt: str, model: str | None = None, timeout: int = 180) -> dict[str, Any]:
-    cfg, agent = provision()
+    agent = provision()
     cmd = [
         "claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
         "--mcp-config", str(agent / "reminders.mcp.json"), "--strict-mcp-config",
         "--settings", str(agent / "settings.json"),
+        "--setting-sources", "project,local",  # drop global user CLAUDE.md
         "--allowedTools", *ALLOWED,
         "--disallowedTools", *DISALLOWED,
     ]
     if model:
         cmd += ["--model", model]
-    env = dict(os.environ, CLAUDE_CONFIG_DIR=str(cfg))
+    # ENABLE_TOOL_SEARCH=false loads all 6 MCP tools directly (no deferred
+    # ToolSearch step), so the agent's tool list is exactly the voice surface.
+    env = dict(os.environ, ENABLE_TOOL_SEARCH="false")
     try:
         proc = subprocess.run(
             cmd, cwd=str(agent), env=env, capture_output=True, text=True,
