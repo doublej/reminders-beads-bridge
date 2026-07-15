@@ -318,6 +318,27 @@ tool call you ran);
 name the gaps you couldn't reach rather than paper over them. The Location
 header is the only exception (raw paths fine).
 
+**Write for the ear, and tell the voice agent to talk that way too.** The
+brief will be spoken, and heard, not read — so keep it plainer and less
+technical than a doc:
+
+- **Sentences suitable for speech**: short, one idea each; front-load the
+  point; no clause pile-ups a listener can't hold. Read a sentence in your
+  head — if it needs a second look to parse, split it.
+- **Dial the jargon down a notch.** Prefer the everyday word ("the part
+  that decides which product to show" over "the resolver"); when a
+  technical term is genuinely the clearest, say it once and gloss it in
+  passing. Not baby-talk — just a smart colleague explaining out loud, not
+  reciting a spec.
+- **Steer the voice agent explicitly.** It only reads the brief, so add one
+  plain line near the top telling it *how to talk*: keep it conversational
+  and non-technical, translate jargon into everyday language when speaking,
+  short spoken sentences, and check understanding rather than lecturing.
+  (This is the standing example — adapt it to the topic:) "Talk like a
+  sharp colleague thinking out loud, not a technical doc — plain everyday
+  words, short sentences, and unpack any technical term the moment you
+  have to use one."
+
 ### decision walk — structure
 
 A good brief reads like an experienced colleague catching a peer up in two
