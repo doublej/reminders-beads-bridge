@@ -2,31 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>Label</key>
-	<string>com.jurrejan.reminders-bridge</string>
-
-	<key>ProgramArguments</key>
-	<array>
-		<string>/opt/homebrew/bin/uv</string>
-		<string>run</string>
-		<string>--directory</string>
-		<string>/Users/jurrejan/Documents/development/python/reminders-bridge</string>
-		<string>rbridge</string>
-		<string>run</string>
-	</array>
-
-	<key>KeepAlive</key>
-	<true/>
-
-	<key>RunAtLoad</key>
-	<true/>
-
-	<key>StandardOutPath</key>
-	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
-
-	<key>StandardErrorPath</key>
-	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
-
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>HOME</key>
@@ -36,8 +11,31 @@
 		     reconcile beads (FileNotFoundError: 'bd'). launchd does not expand
 		     ~, so the path is absolute. -->
 		<string>/Users/jurrejan/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>RBRIDGE_DASHBOARD_HOST</key>
+		<string>0.0.0.0</string>
+		<key>RBRIDGE_DASHBOARD_PUBLIC_URL</key>
+		<string>https://rbridge.jurrejan.com</string>
 		<key>RBRIDGE_POLL_S</key>
 		<string>5</string>
 	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.jurrejan.reminders-bridge</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/uv</string>
+		<string>run</string>
+		<string>--directory</string>
+		<string>/Users/jurrejan/Documents/development/python/reminders-bridge</string>
+		<string>rbridge</string>
+		<string>run</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/jurrejan/Library/Logs/reminders-bridge.log</string>
 </dict>
 </plist>
