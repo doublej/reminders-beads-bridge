@@ -215,8 +215,7 @@ good-vs-bad examples.
   so file-navigation works (omitting it defaults to the current dir, but be
   explicit):
   ```bash
-  rbridge mailbox open --slug <slug> --kind REMINDERS --brief - --cwd "$PWD" \
-    <<< "$(cat <brief-path>)"
+  rbridge mailbox open --slug <slug> --kind REMINDERS --brief - --cwd "$PWD" < <brief-path>
   ```
   stdout echoes the exact `read` and `close` commands — include them verbatim in
   your reply.
