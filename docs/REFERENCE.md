@@ -85,6 +85,7 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_STATUSES` | `open,in_progress` | Statuses to surface as reminders. Valid: `open`, `in_progress`, `hooked`, `blocked`, `ready`, `waiting`, `closed`. |
 | `RBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
 | `RBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
+| `RBRIDGE_BD_TIMEOUT_S` | `180` | Per-invocation timeout for every `bd` subprocess (`list`/`close`/`reopen`/`create`). Healthy `bd list` is ~1-2s even for a ~1400-issue repo, but `bd` shows episodic ~20x slowdowns that hit every project at once. The large bound exists so such an episode degrades reconcile instead of failing the biggest project outright. If a project times out at this value, investigate `bd` itself rather than raising it. |
 | `RBRIDGE_CLAUDE_LIST` | `_rb_claude_sessions` | Reminders list that drives Claude sessions. |
 | `RBRIDGE_CODEX_LIST` | `_rb_codex_sessions` | Reminders list that drives Codex sessions. |
 | `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN` | (auto-found on `$PATH`) | Explicit binary path for the session engine. |

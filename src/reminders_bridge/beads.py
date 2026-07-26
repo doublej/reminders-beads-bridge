@@ -1,9 +1,20 @@
 """Thin wrapper around the `bd` CLI."""
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+# Healthy `bd list --json --all` is ~1-2s even for the largest repo (~1400
+# issues), but it is prone to episodic ~20x slowdowns that hit every project at
+# once (2026-07-26: all four projects at 19-32s, the same call measured 68-90s;
+# cleared on its own, trigger never identified — not load average or dolt server
+# count, both of which stayed high afterwards). The old 30s cap had no headroom,
+# so the largest project — and only it — crossed the line and failed every cycle
+# while the rest merely ran slow. This bound is for riding out that episode, not
+# for normal operation; a timeout at this value means something is actually wrong.
+_TIMEOUT_S = float(os.getenv("RBRIDGE_BD_TIMEOUT_S", "180"))
 
 
 @dataclass
@@ -22,7 +33,7 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         cwd=cwd,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=_TIMEOUT_S,
     )
 
 
