@@ -27,7 +27,7 @@
 		<string>/opt/homebrew/bin/uv</string>
 		<string>run</string>
 		<string>--directory</string>
-		<string>/Users/jurrejan/Documents/development/python/reminders-bridge</string>
+		<string>/Users/jurrejan/dev/python/reminders-bridge</string>
 		<string>rbridge</string>
 		<string>run</string>
 	</array>
