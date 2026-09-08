@@ -1,5 +1,6 @@
 """EventKit-backed Reminders access (Python ↔ native macOS framework)."""
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,15 +56,25 @@ def took_writes() -> bool:
     return v
 
 
+# Runloop slice used while waiting on an EventKit completion. The previous
+# 0.25 rested on the premise that `runMode:beforeDate:` returns as soon as the
+# completion source is processed, making a wide value free. That premise is
+# wrong: EventKit delivers on its own dispatch queue
+# (com.apple.eventkit.reminders.search), which never wakes this runloop mode,
+# so the loop sleeps out the entire slice before it re-checks the condition —
+# i.e. the slice *was* the fetch latency. Measured against the live store
+# (3 lists / 1429 reminders, run in both orders, identical results every time):
+# 0.25 → ~785ms, 0.05 → ~300ms, 0.02 → ~202ms, 0.005 → ~263ms, with CPU flat at
+# ~90ms throughout. The saving is pure sleep, and below ~0.02 the FFI wakeup
+# rate costs more than the latency it buys — hence 0.02, not lower.
+_SPIN_S = float(os.getenv("RBRIDGE_SPIN_S", "0.02"))
+
+
 def _spin(while_cond) -> None:
-    # `runMode:beforeDate:` returns as soon as EventKit's completion source is
-    # processed, so the timeout only caps idle sleep between checks — a wide
-    # value adds no latency to the common (sub-ms callback) case but avoids
-    # needless 50 Hz FFI wakeups while a slower async call (auth, commit) runs.
     loop = NSRunLoop.currentRunLoop()
     while while_cond():
         loop.runMode_beforeDate_(
-            _RUN_MODE, NSDate.dateWithTimeIntervalSinceNow_(0.25)
+            _RUN_MODE, NSDate.dateWithTimeIntervalSinceNow_(_SPIN_S)
         )
 
 
