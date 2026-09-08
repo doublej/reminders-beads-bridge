@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 from . import api as api_module
@@ -108,6 +109,7 @@ def status() -> None:
         f"Projects: {len(all_projects)} total, {len(active)} with .beads, "
         f"{len(hidden)} hidden, {len(active) - len(hidden)} visible"
     )
+    print(_dolt_footprint(active))
     for p in active:
         ps = state.projects.get(str(p.path))
         linked = len(ps.links) if ps else 0
@@ -116,6 +118,29 @@ def status() -> None:
             f"  [{flag:<7}] {p.name:<30}  "
             f"list={p.list_name!r:<40}  linked={linked}"
         )
+
+
+def _dolt_footprint(projects: list[projects_module.Project]) -> str:
+    """One line naming the `dolt sql-server` processes this bridge is on the
+    hook for. `bd` starts them detached (PPID 1, own process group), so they
+    never appear under the daemon in Activity Monitor — polling a project is
+    the only reason one exists, and this is the only place that link is
+    visible. The reconcile gate reaps them after `RBRIDGE_DOLT_IDLE_STOP_S`."""
+    live = {
+        p.name: pid
+        for p in projects
+        if (pid := beads_module.server_pid(p.path)) is not None
+    }
+    if not live:
+        return "Dolt servers: none running"
+    out = subprocess.run(
+        ["ps", "-o", "rss=", "-p", ",".join(str(pid) for pid in live.values())],
+        capture_output=True,
+        text=True,
+    )
+    mb = sum(int(line) for line in out.stdout.split()) // 1024
+    named = ", ".join(f"{name}({pid})" for name, pid in sorted(live.items()))
+    return f"Dolt servers: {len(live)} running, ~{mb}MB — {named}"
 
 
 def lint() -> None:
