@@ -425,6 +425,21 @@ _lane_last: dict[str, float] = {}
 _cache: dict[str, Any] = {"hidden": set(), "settings": None}
 _MIN_WAIT_S = float(os.getenv("RBRIDGE_MIN_WAIT_S", "3.0"))
 
+# Reconcile gate. Running the lane is not free the way the other lanes are:
+# `bd list` auto-starts a detached `dolt sql-server` per project that never
+# exits, so an unconditional pass pins ~110MB x N forever, for projects whose
+# beads have not moved in weeks. Skip the `bd` call while a project's Dolt
+# journal is unchanged — nothing on the beads side can have happened — and reap
+# the server `bd` left running once the project has been quiet long enough.
+# Reminder-side changes (checkbox, capture) do not reach us through the journal;
+# they arrive as `woke`, which forces a full pass. `_RECONCILE_FULL_S` is the
+# fallback for the one case where `woke` is unreliable: the EventKit observer
+# failed to install, so nothing is event-driven and every lane is on intervals.
+_DOLT_IDLE_STOP_S = float(os.getenv("RBRIDGE_DOLT_IDLE_STOP_S", "300"))
+_RECONCILE_FULL_S = float(os.getenv("RBRIDGE_RECONCILE_FULL_S", "600"))
+_journal: dict[str, tuple[int, float]] = {}
+_last_full = 0.0
+
 
 def _due(name: str, now: float, woke: bool) -> bool:
     if woke or (now - _lane_last.get(name, 0.0)) >= _LANE_EVERY_S[name]:
@@ -493,20 +508,50 @@ def sync_once(
         if _due("reconcile", now, woke):
             show_completed = settings.get("show_completed", False)
             _safe(
-                "Reconcile", _run_reconcile, visible, cfg, state, client, show_completed
+                "Reconcile",
+                _run_reconcile, visible, cfg, state, client, show_completed, woke,
             )
         heartbeat_module.persist()
         reminders_module.reset_store()
         return len(visible)
 
 
-def _run_reconcile(visible, cfg, state, client, show_completed: bool) -> None:
+def _beads_quiet(project, now: float) -> bool:
+    """True when nothing in this project's beads DB has moved since the last
+    pass, so `bd list` would return exactly what we already reconciled. Reaps
+    the idle `dolt sql-server` on the way past."""
+    size = beads_module.journal_size(project.path)
+    if size is None:
+        return False
+    prev = _journal.get(str(project.path))
+    if prev is None or prev[0] != size:
+        _journal[str(project.path)] = (size, now)
+        return False
+    quiet_s = now - prev[1]
+    if quiet_s >= _DOLT_IDLE_STOP_S and beads_module.stop_server(project.path):
+        log.info(
+            "%s: stopped idle dolt sql-server (quiet %.0fs)", project.name, quiet_s
+        )
+    return True
+
+
+def _run_reconcile(visible, cfg, state, client, show_completed: bool, woke: bool) -> None:
     """Reconcile every visible project, resilient per-project — one project's
     unexpected error no longer aborts the rest of the cycle (a single bd failure
     silently killed all reconciles for two weeks). Re-raise a summary so `_safe`
     records the failure + escalates."""
+    global _last_full
+    now = time.monotonic()
+    full = woke or (
+        not watcher_module.installed()
+        and (now - _last_full) >= _RECONCILE_FULL_S
+    )
+    if full:
+        _last_full = now
     errs = []
     for project in visible:
+        if not full and _beads_quiet(project, now):
+            continue
         with reminders_module.autorelease_pool():
             t0 = time.monotonic()
             try:

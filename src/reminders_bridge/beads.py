@@ -104,3 +104,66 @@ def doctor(cwd: Path) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"bd missing or broken: {result.stderr.strip()}")
     return result.stdout.strip()
+
+
+# --- Dolt server lifecycle -------------------------------------------------
+# Any `bd` call auto-starts a per-project `dolt sql-server` (~110MB RSS) and
+# never stops it, so reconciling N projects on a timer pins N servers for the
+# daemon's entire lifetime — measured 2026-09-08 at 7 servers / ~900MB for
+# repos with no edits in weeks. The servers `setsid` away (PPID 1, own process
+# group), so they can never be *in* our process group; we own them by ledger
+# instead: skip `bd` while a project's beads data is unchanged (`journal_size`)
+# and stop the server it left behind (`stop_server`).
+
+_JOURNAL_GLOB = ".dolt/noms/" + "v" * 32
+
+
+def journal_size(cwd: Path) -> int | None:
+    """Total size of this project's Dolt write-ahead journals, or None if the
+    project has none (fresh repo, unknown layout) and cannot be gated.
+
+    This is the reconcile gate's change signal. Verified 2026-09-08 against a
+    live server-mode repo: it moves on every mutation (create / close / reopen /
+    note / delete) and stays put across read-only `bd list`, server start, and
+    `bd dolt stop`. That blindness to server lifecycle is the load-bearing
+    property — a signal that moved when the server did would make the reaper
+    restart what it had just stopped, every cycle. (`manifest` and
+    `.beads/last-touched` both fail one half of this and were rejected.)
+    `bd gc`/`compact` rewrites the journal, which reads as a change: one
+    redundant — and idempotent — reconcile, i.e. the safe direction.
+    """
+    total = 0
+    found = False
+    for p in (cwd / ".beads").rglob(_JOURNAL_GLOB):
+        if "stats" in p.parts or "backup" in p.parts:
+            continue  # the stats DB churns on read-only queries
+        try:
+            total += p.stat().st_size
+        except OSError:
+            continue
+        found = True
+    return total if found else None
+
+
+def server_pid(cwd: Path) -> int | None:
+    """PID of this project's running `dolt sql-server`, or None."""
+    try:
+        pid = int((cwd / ".beads" / "dolt-server.pid").read_text().strip())
+    except (OSError, ValueError):
+        return None
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return None
+    return pid
+
+
+def stop_server(cwd: Path) -> bool:
+    """Stop this project's `dolt sql-server` if one is running; True if stopped.
+
+    A memory reclaim, not a shutdown: `bd` restarts it transparently on the next
+    command (measured ~0.7s cold vs ~0.2s warm).
+    """
+    if server_pid(cwd) is None:
+        return False
+    return _run(["dolt", "stop"], cwd).returncode == 0

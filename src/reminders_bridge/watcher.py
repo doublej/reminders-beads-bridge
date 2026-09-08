@@ -40,6 +40,12 @@ def install(store) -> bool:
     return True
 
 
+def installed() -> bool:
+    """Whether the change observer is live. When it is not, `wait` can never
+    report a change, so lanes that gate on `woke` need an interval fallback."""
+    return _observer is not None
+
+
 def _pump(seconds: float) -> None:
     end = time.monotonic() + seconds
     loop = NSRunLoop.currentRunLoop()

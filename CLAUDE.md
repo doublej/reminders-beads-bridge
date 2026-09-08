@@ -99,6 +99,19 @@ instant via `woke`; only non-Reminders changes (new bead/tab, finished child)
 wait out the interval. The loop wait is also floored at `RBRIDGE_MIN_WAIT_S` and
 skips the watcher settle-pump on cycles that wrote nothing.
 
+Reconcile carries a second gate on top of `_due()`, because it is the one lane
+whose cost is a *process*: any `bd` call auto-starts a detached, never-exiting
+`dolt sql-server` per project (~110MB). On an idle tick `_beads_quiet()` skips a
+project whose Dolt journal (`beads.journal_size`) has not moved — nothing on the
+beads side can have happened — and after `RBRIDGE_DOLT_IDLE_STOP_S` reaps that
+project's server. Reminder-side changes never reach the journal; they arrive as
+`woke`, which forces a full pass. `RBRIDGE_RECONCILE_FULL_S` is the fallback for
+the observer-failed-to-install case only. **Do not swap the change signal** for
+`.beads/last-touched` or the Dolt `manifest` — both were tried and fail (the
+first misses `reopen`/`delete`, the second misses every live write and moves on
+server stop, which makes the reaper thrash). `testkit/gate_check.py` asserts the
+two properties the signal must keep; run it after a `bd` upgrade.
+
 Load-bearing invariants:
 - Title format `{bead-id}: {title}` — parsed to adopt pre-existing reminders.
 - Body is fully daemon-managed **except** `<bb:notes>`. Drift in
