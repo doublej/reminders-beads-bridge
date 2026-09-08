@@ -51,7 +51,7 @@ Hiding a project via `_rb_beads_projects` is **destructive** for any free-form t
 ## Quick start
 
 ```bash
-cd ~/Documents/development/python/reminders-bridge
+cd ~/dev/python/reminders-bridge
 uv sync
 uv run rbridge doctor
 uv run rbridge sync      # one-shot reconcile
@@ -86,6 +86,8 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_API_URL` | `http://localhost:5173` | Base URL for the beads-kanban HTTP API (plumbing only; daemon still uses `bd` CLI). |
 | `RBRIDGE_API_TIMEOUT_S` | `10` | Per-request timeout for the API client. |
 | `RBRIDGE_BD_TIMEOUT_S` | `180` | Per-invocation timeout for every `bd` subprocess (`list`/`close`/`reopen`/`create`). Healthy `bd list` is ~1-2s even for a ~1400-issue repo, but `bd` shows episodic ~20x slowdowns that hit every project at once. The large bound exists so such an episode degrades reconcile instead of failing the biggest project outright. If a project times out at this value, investigate `bd` itself rather than raising it. |
+| `RBRIDGE_DOLT_IDLE_STOP_S` | `300` | How long a project's beads DB must be unchanged before the reconcile gate stops the `dolt sql-server` `bd` left running for it. Every `bd` call auto-starts one (~110MB RSS) and never stops it, so without this the daemon pins one server per visible project forever — measured 2026-09-08 at 7 servers / ~900MB for repos untouched in weeks. `bd` restarts the server transparently on the next call (~0.7s cold vs ~0.2s warm). Set `0` to reap on the first quiet pass; there is no "never" — raise it instead. |
+| `RBRIDGE_RECONCILE_FULL_S` | `600` | Fallback interval for a full (ungated) reconcile pass, used **only** when the EventKit change observer failed to install. With the observer live, reminder-side changes arrive as `woke` and force a full pass on their own, so the gate needs no timer. |
 | `RBRIDGE_CLAUDE_LIST` | `_rb_claude_sessions` | Reminders list that drives Claude sessions. |
 | `RBRIDGE_CODEX_LIST` | `_rb_codex_sessions` | Reminders list that drives Codex sessions. |
 | `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN` | (auto-found on `$PATH`) | Explicit binary path for the session engine. |
@@ -147,14 +149,14 @@ Common headers:
 
 Example interactive request:
 ```
-cwd: ~/Documents/development/python/foo
+cwd: ~/dev/python/foo
 
 extra context goes here, anything below the cwd line is appended to the prompt
 ```
 
 Example capture request:
 ```
-cwd: ~/Documents/development/python/foo
+cwd: ~/dev/python/foo
 capture: true
 
 What does main.py do? Reply in one paragraph.
@@ -166,7 +168,7 @@ Binaries: `claude` / `codex` on `$PATH` (override with `RBRIDGE_CLAUDE_BIN` / `R
 
 Body format:
 ```
-cwd: ~/Documents/development/python/reminders-bridge
+cwd: ~/dev/python/reminders-bridge
 chat: true
 session: <uuid>          # daemon adds this after the first turn
 
@@ -197,7 +199,7 @@ Hard timeout per turn: `RBRIDGE_SESSIONS_TIMEOUT_S` (default 900s). Extra CLI fl
 Add `fixer: true` to a chat-mode reminder and the daemon prepends a base prompt to the first turn — recent daemon log, captures/sessions state files, project paths, and architecture rules — so the spawned `claude -p` has the context to diagnose or repair the bridge itself. Subsequent turns reuse the session id and don't re-inject the wrapper.
 
 ```
-cwd: ~/Documents/development/python/reminders-bridge
+cwd: ~/dev/python/reminders-bridge
 chat: true
 fixer: true
 

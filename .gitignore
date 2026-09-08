@@ -13,9 +13,11 @@ __pycache__/
 
 # Beads runtime files (per-machine state)
 .beads/dolt-server.port
+.beads/dolt-server-config.yaml
 .beads/dolt/
 .beads/*.db*
 .beads/backup/
+*.gate.lock
 .env
 node_modules/
 target/

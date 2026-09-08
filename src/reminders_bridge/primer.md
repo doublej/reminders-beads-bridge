@@ -444,7 +444,7 @@ Exit codes on `open`: `1` empty brief or bad slug, `2` Reminders unavailable
 ## Failure modes
 
 - **`rbridge: command not found`** — reinstall:
-  `uv tool install --force --reinstall ~/Documents/development/python/reminders-bridge`.
+  `uv tool install --force --reinstall ~/dev/python/reminders-bridge`.
   The brief is already on disk; nothing lost.
 - **Reminders permission missing** — `open` exits 2 with a clear error. Grant in
   System Settings → Privacy & Security → Reminders, then re-run.

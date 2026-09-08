@@ -75,7 +75,7 @@ sequenceDiagram
   participant CL as claude -p (subprocess)
 
   U->>IOS: add reminder in "Claude: Sessions"<br/>title: "Summarize my open bugs"
-  Note right of U: body:<br/>cwd: ~/Documents/development/python/wallgen<br/>chat: true<br/><br/>you:<br/>list open beads, group by file
+  Note right of U: body:<br/>cwd: ~/dev/python/wallgen<br/>chat: true<br/><br/>you:<br/>list open beads, group by file
   IOS->>REM: sync
   D->>REM: scan for pending 'you:' blocks
   D->>D: detect chat-mode reminder<br/>no session id yet

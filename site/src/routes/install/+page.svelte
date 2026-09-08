@@ -73,7 +73,7 @@ flowchart TD
 
 <h2>2 · Clone</h2>
 
-<pre><code>cd ~/Documents/development      # or anywhere; this is a personal location
+<pre><code>cd ~/dev      # or anywhere; this is a personal location
 git clone git@github.com:doublej/reminders-beads-bridge.git
 cd reminders-beads-bridge</code></pre>
 
@@ -143,7 +143,7 @@ $EDITOR ~/Library/LaunchAgents/com.&lt;you&gt;.reminders-bridge.plist</code></pr
 <p>Replace inside the copied plist:</p>
 <ul>
   <li><code>/Users/jurrejan</code> → your <code>$HOME</code>.</li>
-  <li><code>/Users/jurrejan/Documents/development/python/reminders-bridge</code>
+  <li><code>/Users/jurrejan/dev/python/reminders-bridge</code>
   → wherever you cloned the repo.</li>
   <li><code>com.jurrejan.reminders-bridge</code> →
   <code>com.&lt;you&gt;.reminders-bridge</code> in the <code>Label</code> key
@@ -165,7 +165,7 @@ the <code>! Beads: Readme</code> list sorts to the top.</p>
 
 <h2>Updating</h2>
 
-<pre><code>cd ~/Documents/development/reminders-beads-bridge
+<pre><code>cd ~/dev/reminders-beads-bridge
 git pull
 uv sync
 launchctl unload ~/Library/LaunchAgents/com.&lt;you&gt;.reminders-bridge.plist

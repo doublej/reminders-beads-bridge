@@ -97,7 +97,7 @@ sequenceDiagram
 
 <h2>Common headers</h2>
 
-<pre><code>cwd: ~/Documents/development/python/foo   # working directory (~ allowed). Default: $HOME.
+<pre><code>cwd: ~/dev/python/foo   # working directory (~ allowed). Default: $HOME.
 capture: true                              # opt into Capture mode
 chat: true                                 # opt into Chat mode
 fixer: true                                # together with chat:true → Fixer mode
