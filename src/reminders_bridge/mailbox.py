@@ -103,6 +103,8 @@ class CloseResult:
     list_error: str | None = None
     mirror_error: str | None = None
     state_deleted: bool = False
+    archived: int | None = None
+    archive_path: str = ""
 
 
 def _state_path(slug: str) -> Path:
@@ -111,6 +113,11 @@ def _state_path(slug: str) -> Path:
 
 def _brief_path(slug: str) -> Path:
     return _STATE_DIR / f"{slug}.brief.md"
+
+
+def _archive_path(slug: str) -> Path:
+    """Where `close` snapshots the drained responses. Survives `_delete_state`."""
+    return _STATE_DIR / f"{slug}.responses.json"
 
 
 def _validate(slug: str) -> None:
@@ -146,6 +153,8 @@ def list_active() -> list[Mailbox]:
         return []
     out: list[Mailbox] = []
     for f in sorted(_STATE_DIR.glob("*.json")):
+        if f.name.endswith(".responses.json"):  # close archives, not state
+            continue
         try:
             out.append(Mailbox(**json.loads(f.read_text())))
         except (json.JSONDecodeError, OSError, TypeError):
@@ -260,6 +269,9 @@ def _classify(title: str) -> tuple[str, str]:
 def read(slug: str) -> dict:
     mb = _load(slug)
     if mb is None:
+        archived = _load_archive(slug)
+        if archived is not None:
+            return archived
         raise RuntimeError(f"no mailbox for slug {slug!r}")
     rems = reminders_module.list_reminders(mb.list_name)
     responses = []
@@ -294,11 +306,63 @@ def read(slug: str) -> dict:
     }
 
 
+def _archive(mb: Mailbox, reason: str) -> int | None:
+    """Snapshot the responses before the list is deleted.
+
+    Closing destroys the list, the mirror and the state file, so without this
+    every response the user recorded is gone the moment the daemon sees a
+    `done` reminder — before the project agent has had a chance to drain.
+    Never raises: a failed archive must not block the close.
+    """
+    try:
+        data = read(mb.slug)
+    except (RuntimeError, OSError) as e:
+        log.warning("mailbox %s: archive drain failed: %s", mb.slug, e)
+        return None
+    data["closed_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat(
+        timespec="seconds"
+    )
+    data["close_reason"] = reason
+    try:
+        atomicio_module.atomic_write_text(
+            _archive_path(mb.slug), json.dumps(data, indent=2)
+        )
+    except OSError as e:
+        log.warning("mailbox %s: archive write failed: %s", mb.slug, e)
+        return None
+    return sum(1 for r in data["responses"] if r["kind"] != "done")
+
+
+def _load_archive(slug: str) -> dict | None:
+    p = _archive_path(slug)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def list_closed() -> list[dict]:
+    """Archived (closed) exchanges, newest last. `read()` still serves these."""
+    if not _STATE_DIR.exists():
+        return []
+    out: list[dict] = []
+    for f in _STATE_DIR.glob("*.responses.json"):
+        data = _load_archive(f.name[: -len(".responses.json")])
+        if data is not None:
+            out.append(data)
+    return sorted(out, key=lambda d: d.get("closed_at", ""))
+
+
 def close(slug: str, reason: str = "user") -> CloseResult:
     mb = _load(slug)
     if mb is None:
         return CloseResult(found=False)
     result = CloseResult(found=True)
+    result.archived = _archive(mb, reason)
+    if result.archived is not None:
+        result.archive_path = str(_archive_path(slug))
     try:
         if reminders_module.delete_list(mb.list_name):
             result.list_deleted = True
@@ -314,7 +378,14 @@ def close(slug: str, reason: str = "user") -> CloseResult:
         log.warning("mirror delete failed for %s: %s", slug, e)
     _delete_state(slug)
     result.state_deleted = True
-    activity_module.record(mb.list_name, "voice-closed", "", f"{slug} ({reason})")
+    drained = (
+        f"{result.archived} responses archived"
+        if result.archived is not None
+        else "archive FAILED"
+    )
+    activity_module.record(
+        mb.list_name, "voice-closed", "", f"{slug} ({reason}, {drained})"
+    )
     return result
 
 

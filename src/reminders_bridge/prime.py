@@ -90,8 +90,11 @@ def _contract() -> dict:
         "commands": {
             "prime": "this primer; --json for the contract",
             "mailbox open": "--slug --kind {REMINDERS,CLAUDE_VOICE} --brief - --cwd PATH",
-            "mailbox read": "--slug; drain responses as JSON",
-            "mailbox close": "--slug; tear down",
+            "mailbox read": (
+                "--slug; drain responses as JSON (falls back to the close "
+                "archive once the exchange is closed)"
+            ),
+            "mailbox close": "--slug; archive responses, then tear down",
             "mailbox refresh": "--slug; re-up reminders, keep brief",
             "mailbox list": "enumerate active mailboxes",
         },

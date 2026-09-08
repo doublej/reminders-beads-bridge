@@ -263,6 +263,11 @@ is `decision` / `note` / `question` / `deferred` / `done` / `free`. Treat
 `deferred` as an open question to re-raise next session, not a resolved item.
 Header / brief / nav reminders are filtered out automatically.
 
+Draining after the exchange closed still works: `close` archives the responses
+to `~/.claude/voice-mailboxes/<slug>.responses.json` first, and `read` falls
+back to that file (adding `closed_at` / `close_reason`). So a `done` reminder
+can never destroy answers you have not read yet.
+
 ### 7. Close
 
 ```bash
@@ -433,9 +438,10 @@ open question during the call, do not fabricate a decision — log it as
   — open/refresh (idempotent; re-opening a slug refreshes header+brief, keeps
   responses). Brief from stdin (`-`) or a path.
 - `rbridge mailbox read --slug S` — drain responses as JSON.
-- `rbridge mailbox close --slug S` — tear down (deletes list + mirror + state).
+- `rbridge mailbox close --slug S` — tear down (archives responses, then
+  deletes list + mirror + state).
 - `rbridge mailbox refresh --slug S` — re-up reminders without changing the brief.
-- `rbridge mailbox list` — enumerate active mailboxes.
+- `rbridge mailbox list` — enumerate active mailboxes, then closed archives.
 - `rbridge doctor` — health; reports per-mailbox `nav=on/off root=…`.
 
 Exit codes on `open`: `1` empty brief or bad slug, `2` Reminders unavailable

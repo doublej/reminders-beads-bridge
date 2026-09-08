@@ -366,7 +366,14 @@ def _mailbox_read(ns) -> None:
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
-    if out["has_done"]:
+    if out.get("closed_at"):
+        print(
+            f"note: exchange closed at {out['closed_at']} "
+            f"({out.get('close_reason', '?')}); responses come from the archive "
+            f"{mailbox_module._archive_path(ns.slug)}",
+            file=sys.stderr,
+        )
+    elif out["has_done"]:
         print(
             "note: a `done` reminder is present — daemon will close on next "
             "cycle. Consume responses now.",
@@ -390,6 +397,10 @@ def _mailbox_close(ns) -> None:
         parts.append(f"list delete FAILED ({result.list_error})")
     if result.mirror_error:
         parts.append(f"mirror delete failed ({result.mirror_error})")
+    if result.archived is not None:
+        parts.append(f"{result.archived} responses archived -> {result.archive_path}")
+    else:
+        parts.append("responses NOT archived")
     parts.append("state cleared")
     print(f"mailbox closed: {ns.slug} — " + ", ".join(parts))
     if result.list_error:
@@ -408,9 +419,17 @@ def _mailbox_list() -> None:
     boxes = mailbox_module.list_active()
     if not boxes:
         print("(no active mailboxes)")
-        return
     for mb in boxes:
         print(
             f"{mb.slug:<30}  kind={mb.kind:<14}  "
             f"created={mb.created_at}  list={mb.list_name!r}"
         )
+    closed = mailbox_module.list_closed()
+    if closed:
+        print("\nclosed (archived — `mailbox read` still works):")
+        for d in closed:
+            print(
+                f"{d['slug']:<30}  closed={d.get('closed_at', '?')}  "
+                f"responses={len(d.get('responses', []))}  "
+                f"({d.get('close_reason', '?')})"
+            )

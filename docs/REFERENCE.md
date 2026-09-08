@@ -103,7 +103,7 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
 | `RBRIDGE_VOICE_LIST_PREFIX` | `_rb_voice_` | Prefix for new voice exchange list names. Final list name = `{this}{slug}` — **does not** combine with `RBRIDGE_LIST_PREFIX` (the voice flow is independent of beads). Existing exchanges on a pre-`_rb_` name are migrated losslessly each cycle (list renamed, stored `list_name` rewritten). |
-| `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files and brief markdown live. |
+| `RBRIDGE_MAILBOX_DIR` | `~/.claude/voice-mailboxes` | Where mailbox state files, brief markdown and close archives (`<slug>.responses.json`) live. |
 | `RBRIDGE_MAILBOX_MIRROR` | `true` | Drop a silent breadcrumb reminder into the default Reminders list. Set `false` to disable. |
 | `RBRIDGE_VOICE_NAV` | `true` | Master switch for voice-exchange file navigation (`fetch:` / `grep:` / `tree:`). Set `false` to stop serving files entirely. |
 | `RBRIDGE_NAV_MAX_BYTES` | `65536` | Max bytes returned per `fetch:` page; larger files paginate (`fetch: <path> page 2`). |
@@ -120,10 +120,10 @@ uv run rbridge run       # persistent poll loop
 - `rbridge lint` — Read-only diagnosis of body drift, orphans, and missing tags.
 - `rbridge doctor` — Verify config, `bd`, Reminders permission, beads-kanban API. Also prints active voice mailbox count, the global file-nav switch, and each mailbox's nav state + root.
 - `rbridge mailbox open --slug <s> --kind REMINDERS --brief -` — open a voice exchange mailbox. Brief read from stdin, or pass `--brief <path>`.
-- `rbridge mailbox read --slug <s>` — drain user responses as JSON.
-- `rbridge mailbox close --slug <s>` — tear down the mailbox.
+- `rbridge mailbox read --slug <s>` — drain user responses as JSON. Falls back to the close archive once the exchange is closed.
+- `rbridge mailbox close --slug <s>` — archive the responses, then tear down the mailbox.
 - `rbridge mailbox refresh --slug <s>` — re-up header + brief + mirror reminders.
-- `rbridge mailbox list` — enumerate active mailboxes.
+- `rbridge mailbox list` — enumerate active mailboxes, then closed archives.
 - `rbridge tabs` — list live Ghostty tabs running Claude Code (pid / tty / mode / session / project). Read-only.
 ## Sessions: launching Claude / Codex from Reminders
 
@@ -340,6 +340,7 @@ commits — keep the cross-surface vocabulary consistent.
 | **writeback contract** | Section of the REMINDERS-flavor brief that names the exchange list and the response prefixes. |
 | **drain** | The act of the agent reading user responses via `rbridge mailbox read --slug <slug>`. |
 | **open / close / refresh** | Lifecycle verbs. `rbridge mailbox open` creates, `close` tears down, `refresh` re-ups reminders without changing the brief. |
+| **archive** | `<slug>.responses.json` in the mailbox dir — the drained responses, written by `close` *before* it deletes the list, mirror and state. `read` serves it after the fact (`closed_at` / `close_reason` present), so an auto-close can never lose answers. Survives `close`; never pruned. |
 | **takeout** | Composing a brief and opening a mailbox. The mailbox flow is driven by `rbridge prime` (the self-describing playbook in `src/reminders_bridge/primer.md`; no skill). `/voice-deep-takeout` remains for the deep paste-into-voice flow with a structured return template (no mailbox). |
 | **file navigation** | The pull lane: the voice agent requests repo content via `fetch:` / `grep:` / `tree:` reminders and the daemon serves them in place. Sandboxed to the mailbox root; auto-enabled when the mailbox has a root. |
 | **request / served / blocked** | A nav request reminder (`fetch:` / `grep:` / `tree:`), its in-place result (`file:` / `results:` / `listing:`), or a refusal (`blocked:`). All excluded from `drain`. |
@@ -347,6 +348,8 @@ commits — keep the cross-surface vocabulary consistent.
 Activity log events use the same vocabulary: `voice-opened`,
 `voice-response`, `voice-closed` (with reasons `user` / `cli` /
 `done-reminder` / `list-deleted`), `voice-nav`, `voice-nav-blocked`.
+`voice-closed` also carries the archived response count, e.g.
+`interview (done-reminder, 12 responses archived)`.
 
 ### Flow
 
@@ -372,6 +375,8 @@ The intended flow is:
 5. When the user returns, the agent runs `rbridge mailbox read --slug <slug>`
    to drain the responses as JSON, then `rbridge mailbox close` (or the
    user adds a `done` reminder and the daemon auto-closes next cycle).
+   Either close archives the responses first, so `read` keeps working —
+   with `closed_at` set — after the list is gone.
 
 The mailbox is not tied to beads. The skill works from any directory; no
 `.beads/` directory or registry entry is required.
