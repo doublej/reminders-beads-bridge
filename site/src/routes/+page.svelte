@@ -96,8 +96,8 @@ flowchart LR
       <h3>Sessions</h3>
       <p>
         Two reminders lists fire <code>claude</code> / <code>codex</code>
-        sessions: interactive Ghostty, headless capture, or multi-turn
-        chat right inside the reminder body.
+        sessions: headless capture, or multi-turn chat right inside the
+        reminder body.
       </p>
       <p><a href="{base}/sessions/">Session modes →</a></p>
     </div>

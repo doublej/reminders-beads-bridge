@@ -2,7 +2,7 @@
 
 Token-gated (see `dashboard.py`). Compact markdown by default (the primary
 reader is an agent fetching the URL); `?format=json` for structured reads. Paths
-are the drill-down: `/`, `/project/<name>`, `/sessions`, `/tabs`, `/voice`,
+are the drill-down: `/`, `/project/<name>`, `/sessions`, `/voice`,
 `/activity`. No writes — actions go through rbridge. Binds whatever
 `RBRIDGE_DASHBOARD_HOST` says (loopback by default; `0.0.0.0` behind a reverse
 proxy).
@@ -27,8 +27,6 @@ def _route(path: str, cfg: config_module.Config) -> tuple[dict[str, Any] | None,
         return snapshot_module.overview(cfg), "overview"
     if path == "/sessions":
         return snapshot_module.sessions(cfg), "sessions"
-    if path == "/tabs":
-        return snapshot_module.tabs(cfg), "tabs"
     if path == "/voice":
         return snapshot_module.voice(cfg), "voice"
     if path == "/activity":

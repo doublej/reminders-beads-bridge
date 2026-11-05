@@ -21,7 +21,6 @@ from pathlib import Path
 from . import activity as activity_module
 from . import atomicio as atomicio_module
 from . import fixer as fixer_module
-from . import launch as launch_module
 from . import procutil as procutil_module
 from . import reminders as reminders_module
 
@@ -119,7 +118,7 @@ def _compose(body: str, response: str, session_id: str) -> str:
 
 def _launch_turn(rem_id: str, list_name: str, prompt: str, cwd: Path, sid: str | None) -> None:
     out = f"/tmp/rbridge-session-{rem_id.replace('/', '_')}-{int(time.time())}.out"
-    argv = [launch_module.session_bin("claude"), "-p", "--output-format", "json"]
+    argv = [procutil_module.session_bin("claude"), "-p", "--output-format", "json"]
     if sid:
         argv += ["--resume", sid]
     extra = os.getenv("RBRIDGE_CLAUDE_FLAGS", "").split()

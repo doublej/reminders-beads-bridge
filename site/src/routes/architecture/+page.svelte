@@ -27,7 +27,6 @@ flowchart TB
 
   subgraph sessions["Sessions lane"]
     TRIG["triggers.py<br/>Claude/Codex: Sessions"]
-    LAUNCH["launch.py<br/>spawn Ghostty"]
     CAP["captures.py<br/>headless one-shot"]
     SESS["sessions.py<br/>multi-turn chat"]
     FIX["fixer.py<br/>self-diagnose"]
@@ -53,7 +52,7 @@ flowchart TB
     BDCLI[("bd CLI<br/>+ .beads/*.db")]:::extern
     EKS[("EventKit<br/>+ Reminders.app")]:::store
     DSK[("~/.claude/*.json<br/>state files")]:::store
-    GH["Ghostty + claude/codex"]:::extern
+    AGENT["claude / codex<br/>(headless subprocess)"]:::extern
   end
 
   CLI --> DAEMON
@@ -79,10 +78,8 @@ flowchart TB
   SETT --> REM
   README --> REM
   ACT --> REM
-  TRIG --> LAUNCH
-  LAUNCH --> GH
-  CAP --> GH
-  SESS --> GH
+  CAP --> AGENT
+  SESS --> AGENT
   FIX --> SESS
   MAIL --> REM
   MAIL --> MIRROR
@@ -95,7 +92,7 @@ flowchart TB
   API -. unused .-> DAEMON
   EVT -. unused .-> DAEMON
 
-  class DAEMON,CLI,RECON,BODY,BEADS,PROJ,PLIST,SETT,README,ACT,TRIG,LAUNCH,CAP,SESS,FIX,MAIL,MIRROR,REM,WATCH,LINK daemon
+  class DAEMON,CLI,RECON,BODY,BEADS,PROJ,PLIST,SETT,README,ACT,TRIG,CAP,SESS,FIX,MAIL,MIRROR,REM,WATCH,LINK daemon
   class API,EVT lane
 `;
 

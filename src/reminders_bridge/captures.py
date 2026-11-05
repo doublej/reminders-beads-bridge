@@ -17,7 +17,6 @@ from pathlib import Path
 
 from . import activity as activity_module
 from . import atomicio as atomicio_module
-from . import launch as launch_module
 from . import procutil as procutil_module
 from . import reminders as reminders_module
 
@@ -63,7 +62,7 @@ def active_reminder_ids() -> set[str]:
 
 
 def _build_argv(cmd: str, prompt: str) -> list[str]:
-    bin_ = launch_module.session_bin(cmd)
+    bin_ = procutil_module.session_bin(cmd)
     if cmd == "claude":
         return [bin_, "-p", prompt]
     if cmd == "codex":

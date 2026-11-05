@@ -20,10 +20,9 @@ from . import projects as projects_module
 from . import reminders as reminders_module
 from . import settings as settings_module
 from . import state as state_module
-from . import tabs as tabs_module
 
 
-USAGE = "Usage: rbridge [run|sync|serve|doctor|status|lint|probe|mailbox|tabs|prime]"
+USAGE = "Usage: rbridge [run|sync|serve|doctor|status|lint|probe|mailbox|prime]"
 
 
 def main() -> None:
@@ -45,8 +44,6 @@ def main() -> None:
         probe_module.run()
     elif cmd == "mailbox":
         mailbox_cli(sys.argv[2:])
-    elif cmd == "tabs":
-        tabs()
     elif cmd == "prime":
         prime_module.run(sys.argv[2:])
     else:
@@ -69,20 +66,6 @@ def serve(args: list[str]) -> None:
     parser.add_argument("--host", default=None, help="override bind host (default 127.0.0.1)")
     ns = parser.parse_args(args)
     server_module.run(port=ns.port, host=ns.host)
-
-
-def tabs() -> None:
-    from . import ghostty as ghostty_module
-    from . import transcript as transcript_module
-
-    discovered = ghostty_module.discover()
-    print(f"Tabs list: {tabs_module.list_name()!r}")
-    print(f"Live Ghostty tabs running Claude Code: {len(discovered)}")
-    for t in discovered:
-        s = transcript_module.resolve(t.pid, t.cwd)
-        sid = s.session_id[:8] if s else "-"
-        title = s.title if s else ""
-        print(f"  pid={t.pid:<7} {t.tty:<8} {t.mode:<7} sid={sid:<8} {title or t.project}")
 
 
 def status() -> None:
@@ -283,13 +266,6 @@ def doctor() -> None:
     for mb in boxes:
         on = "on" if navigation_module.is_active(mb) else "off"
         print(f"  {mb.slug:<30}  kind={mb.kind}  nav={on}  root={mb.source_cwd or '—'}")
-
-    from . import ghostty as ghostty_module
-    from . import inject as inject_module
-    n_tabs = len(ghostty_module.discover())
-    ax = "granted" if inject_module.accessibility_ok() else "DENIED (send won't type)"
-    print(f"\nGhostty Claude tabs: {n_tabs} live → list {tabs_module.list_name()!r}")
-    print(f"  Accessibility (needed to type into tabs): {ax}")
 
 
 def _read_brief(arg: str) -> str:

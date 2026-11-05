@@ -41,7 +41,6 @@ comments, docs, commits, and agent-facing text. One concept, one word — the
 | `!_rb_readme` | daemon, read-only | the voice/in-Reminders agent directive (`docs/AGENT.md`); `!` sorts first |
 | `_rb_activity` | daemon, read-only | rolling log of ~200 events |
 | `_rb_settings` | daemon writes, user toggles/edits | bridge controls |
-| `_rb_claude_tabs` | daemon | live Ghostty Claude-tab mirror |
 | `_rb_claude_sessions` / `_rb_codex_sessions` | user creates | session triggers |
 | `_rb_voice_<slug>` | daemon + user | one voice **exchange** |
 
@@ -58,9 +57,10 @@ prefix — they have no beads coupling.
 
 ## Session / trigger modes (`sessions.py` / `triggers.py` / `captures.py`)
 
-**interactive** (default; opens Ghostty) · **capture** (`capture: true`, headless
-one-shot) · **chat** (`chat: true`, multi-turn) · **fixer** (`fixer: true`,
-chat with bridge diagnostics preloaded).
+**capture** (`capture: true`, headless one-shot) · **chat** (`chat: true`,
+multi-turn) · **fixer** (`fixer: true`, chat with bridge diagnostics preloaded).
+A reminder with none of these headers is left alone — the old interactive mode
+opened a Ghostty window and was removed with Ghostty.
 
 ## Voice exchange
 

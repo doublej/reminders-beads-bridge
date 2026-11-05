@@ -82,22 +82,9 @@ Wants Claude to start while he's out.
 
 ---
 
-## Live sessions & tabs
+## Live sessions
 
-### 10. What's Claude doing right now? `[read]`
-A session is running in a Ghostty tab at home.
-- **JJ says:** "What's Claude working on?"
-- **Agent does:** reads `_rb_claude_tabs` body (transcript tail, read-only).
-- **Good utterance:** "mid-refactor on reminders-bridge — running the eval suite."
-
-### 11. Steer the running session `[risky]`
-Wants to add an instruction to the live tab.
-- **JJ says:** "Tell that Claude tab to also run mypy before it finishes."
-- **Agent does:** read-modify-write the tab body, add the line under `send:`, and set `completed: true` in the **same** `reminder_update_v0` (completion is the send trigger).
-- **Good utterance:** "sent."
-- **Watch for:** staging text without completing, or completing then writing = unsent draft = fail.
-
-### 12. Fire off a quick headless task `[risky]`
+### 10. Fire off a quick headless task `[risky]`
 - **JJ says:** "Ask Claude to summarize what changed in reminders-bridge today."
 - **Agent does:** creates a reminder in `_rb_claude_sessions` with a `capture: true` body header.
 - **Good utterance:** "queued — I'll have the summary in the list."
@@ -106,24 +93,24 @@ Wants to add an instruction to the live tab.
 
 ## Voice exchanges (an open review on the phone)
 
-### 13. Record a decision `[write]`
+### 11. Record a decision `[write]`
 The pimpelmees glossary review is open; he settles a naming question.
 - **JJ says:** "For the glossary review, decision: we call it 'wallpaper' everywhere, not 'wall decoration'."
 - **Agent does:** adds a reminder to `_rb_voice_pimpelmees-glossary-review` prefixed `decision:`.
 - **Good utterance:** "logged the decision."
 
-### 14. Pull a file into the exchange `[write]`
+### 12. Pull a file into the exchange `[write]`
 Wants to check the current glossary during the review.
 - **JJ says:** "Show me the glossary file for that review."
 - **Agent does:** adds a `fetch: <exact path>` reminder using the path **from the brief's file map** — never a path it heard spoken (transcription mangles paths); falls back to `grep: <token>` for a fuzzy reference.
 - **Good utterance:** "pulling it in now."
 
-### 15. Park something `[write]`
+### 13. Park something `[write]`
 - **JJ says:** "For the escalation message, deferred: we'll word it after the call with Alex."
 - **Agent does:** adds a `deferred:` reminder to `_rb_voice_wabi-alex-escalation-message`.
 - **Good utterance:** "parked it."
 
-### 16. Wrap the exchange `[write]`
+### 14. Wrap the exchange `[write]`
 - **JJ says:** "I'm done with the glossary review."
 - **Agent does:** adds a `done` reminder → daemon closes the exchange next cycle.
 - **Good utterance:** "closing it out."
@@ -132,18 +119,18 @@ Wants to check the current glossary during the review.
 
 ## Controls & housekeeping
 
-### 17. Turn on the dashboard, get the link `[write]`
+### 15. Turn on the dashboard, get the link `[write]`
 Wants the at-a-glance view on his phone browser.
 - **JJ says:** "Turn on the dashboard and give me the link."
 - **Agent does:** checks `Dashboard server` toggle in `_rb_settings`; then reads the fresh URL from `_rb_dashboard` (reopen for a new token).
 - **Good utterance:** "on — link's in the dashboard reminder."
 
-### 18. Restart a stuck bridge `[risky]`
+### 16. Restart a stuck bridge `[risky]`
 - **JJ says:** "The bridge seems frozen, restart it."
 - **Agent does:** completes the `Restart bridge` action reminder in `_rb_settings` (`os.execv`; it un-completes itself).
 - **Good utterance:** "restarting."
 
-### 19. Mute a project `[write]` (destructive — confirm first)
+### 17. Mute a project `[write]` (destructive — confirm first)
 Too much noise from one project today.
 - **JJ says:** "Hide the pimpelmees project from my context."
 - **Agent does:** **confirms first** (hiding deletes that project's `<bb:notes>`), then checks its row in `_rb_beads_projects`.

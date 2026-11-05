@@ -5,7 +5,6 @@ graph TB
         USER["User<br/>(Mac Reminders.app)"]
         BD[("bd CLI<br/>+ .beads/*.db<br/><i>source of truth</i>")]
         KANBAN["beads-kanban<br/>HTTP API<br/>:5173"]
-        GHOSTTY["Ghostty<br/>+ claude / codex"]
         ICLOUD[("iCloud sync")]
     end
 
@@ -33,7 +32,6 @@ graph TB
         subgraph trigger_path["Standalone session triggers<br/>(no beads coupling)"]
             TRIGGERS["triggers.process_all<br/>scans _rb_claude/codex_sessions<br/>parse_request → cwd + prompt"]
         end
-        LAUNCH["launch.py<br/>Ghostty -e claude|codex<br/>--working-directory"]
         STATE[("state.json<br/>bead-id ↔ reminder-id")]
         ACTIVITY_LOG[("activity.jsonl")]
     end
@@ -98,9 +96,7 @@ graph TB
     SYNC --> TRIGGERS
     L_CLAUDE -- "unchecked = pending" --> TRIGGERS
     L_CODEX -- "unchecked = pending" --> TRIGGERS
-    TRIGGERS --> LAUNCH
-    LAUNCH --> GHOSTTY
-    TRIGGERS -- "mark completed" --> EK
+    TRIGGERS -- "capture: true → headless claude -p" --> EK
 
     %% External writers
     IOS -- "edits via iCloud" --> ICLOUD
@@ -119,7 +115,7 @@ graph TB
     classDef ext fill:#64748b,stroke:#1e293b,color:#fff
     class BD,KANBAN src
     class STATE,ACTIVITY_LOG,REMINDERS,ICLOUD store
-    class WATCHER,SYNC,MASTER,SETTINGS,META,ACTIVITY,RECONCILE,BODY,MARKERS,LAUNCH,BEADS_API daemon
+    class WATCHER,SYNC,MASTER,SETTINGS,META,ACTIVITY,RECONCILE,BODY,MARKERS,BEADS_API daemon
     class L_PROJ,L_SET,L_DOC,L_LOG,L_PRJ,L_CLAUDE,L_CODEX list
     class TRIGGERS daemon
-    class IOS,USER,GHOSTTY,EK,NC ext
+    class IOS,USER,EK,NC ext

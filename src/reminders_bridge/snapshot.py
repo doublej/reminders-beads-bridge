@@ -1,7 +1,7 @@
 """Read-only facade: assemble bridge state for the dashboard, per view.
 
 Reads are file/subprocess based where possible (registry, `state.json`,
-`bd list`, the activity log, `ps`-based tab discovery, mailbox state files) and
+`bd list`, the activity log, mailbox state files) and
 read-only EventKit where a lane lives only in Reminders (sessions) — exactly
 what `rbridge status` / `lint` already do from a one-shot process. Never writes:
 actions stay in rbridge / the daemon, so this is safe in the `serve` child
@@ -20,12 +20,10 @@ from typing import Any
 from . import activity as activity_module
 from . import beads as beads_module
 from . import config as config_module
-from . import ghostty as ghostty_module
 from . import mailbox as mailbox_module
 from . import projects as projects_module
 from . import reminders as reminders_module
 from . import state as state_module
-from . import transcript as transcript_module
 
 _SESSION_LISTS = (
     ("claude", "RBRIDGE_CLAUDE_LIST", "_rb_claude_sessions"),
@@ -99,21 +97,6 @@ def sessions(cfg: config_module.Config) -> dict[str, Any]:
     return {"generated_at": _now(), "sessions": out}
 
 
-def tabs(cfg: config_module.Config) -> dict[str, Any]:
-    out = []
-    for t in ghostty_module.discover():
-        s = transcript_module.resolve(t.pid, t.cwd)
-        out.append({
-            "pid": t.pid,
-            "tty": t.tty,
-            "mode": t.mode,
-            "cwd": t.cwd,
-            "session": s.session_id[:8] if s else "",
-            "title": s.title if s else "",
-        })
-    return {"generated_at": _now(), "tabs": out}
-
-
 def voice(cfg: config_module.Config) -> dict[str, Any]:
     out = [
         {
@@ -168,13 +151,11 @@ def overview(cfg: config_module.Config) -> dict[str, Any]:
     state = state_module.load(cfg.state_path)
     projs = _projects(cfg)
     # `bd list` per project is the dominant cost; fan it out (subprocess → no GIL
-    # contention) so the overview is ~one bd call, not the sum of all. Tab/voice
-    # counts (also subprocess/file work) run concurrently in the same pool.
+    # contention) so the overview is ~one bd call, not the sum of all. The voice
+    # count (also file work) runs concurrently in the same pool.
     with ThreadPoolExecutor(max_workers=12) as ex:
-        f_tabs = ex.submit(ghostty_module.count)
         f_voice = ex.submit(lambda: len(mailbox_module.list_active()))
         beaded = list(ex.map(lambda p: (p, *_beads(p)), projs))
-        tabs_count = f_tabs.result()
         voice_count = f_voice.result()
     rows = []
     agg: dict[str, int] = {}
@@ -198,7 +179,6 @@ def overview(cfg: config_module.Config) -> dict[str, Any]:
             "projects": len(rows),
             "beads": agg,
             "sessions_pending": sum(1 for s in sess if not s["completed"]),
-            "tabs": tabs_count,  # count only — no per-tab transcript resolve
             "voice": voice_count,
         },
         "projects": rows,

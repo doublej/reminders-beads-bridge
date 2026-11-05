@@ -36,7 +36,7 @@ _STYLE = (
 
 def _nav(qs: str) -> str:
     items = [
-        ("/", "overview"), ("/sessions", "sessions"), ("/tabs", "tabs"),
+        ("/", "overview"), ("/sessions", "sessions"),
         ("/voice", "voice"), ("/activity", "activity"),
     ]
     return "<nav>" + " · ".join(_href(p, label, qs) for p, label in items) + "</nav>"
@@ -83,7 +83,7 @@ def overview(d: dict[str, Any], qs: str) -> str:
         f"<p class=meta>{_esc(d['generated_at'])} · poll {cfg['poll_interval_s']}s · "
         f"statuses {_esc(','.join(cfg['statuses']))}</p>"
         f"<p>projects {t['projects']} · beads {_counts(t['beads'])} · "
-        f"sessions {t['sessions_pending']} pending · tabs {t['tabs']} · "
+        f"sessions {t['sessions_pending']} pending · "
         f"voice {t['voice']}</p>"
         "<h2>projects</h2><table><tr><th>project</th><th>beads</th>"
         "<th>by status</th><th>linked</th></tr>"
@@ -126,20 +126,6 @@ def sessions(d: dict[str, Any], qs: str) -> str:
     return _page("sessions", qs, body)
 
 
-def tabs(d: dict[str, Any], qs: str) -> str:
-    rows = "".join(
-        f"<tr><td>{t['pid']}</td><td>{_esc(t['tty'])}</td><td>{_esc(t['mode'])}</td>"
-        f"<td>{_esc(t['session'] or '-')}</td><td>{_esc(t['title'] or t['cwd'])}</td></tr>"
-        for t in d["tabs"]
-    )
-    body = (
-        f"<h1>claude tabs</h1><p class=meta>{_esc(d['generated_at'])}</p>"
-        "<table><tr><th>pid</th><th>tty</th><th>mode</th><th>session</th>"
-        f"<th>title/cwd</th></tr>{rows or '<tr><td>(none live)</td></tr>'}</table>"
-    )
-    return _page("tabs", qs, body)
-
-
 def voice(d: dict[str, Any], qs: str) -> str:
     rows = "".join(
         f"<tr><td>{_esc(m['slug'])}</td><td>{_esc(m['kind'])}</td>"
@@ -161,5 +147,5 @@ def activity(d: dict[str, Any], qs: str) -> str:
 
 RENDER = {
     "overview": overview, "project": project, "sessions": sessions,
-    "tabs": tabs, "voice": voice, "activity": activity,
+    "voice": voice, "activity": activity,
 }

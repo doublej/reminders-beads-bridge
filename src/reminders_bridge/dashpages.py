@@ -16,7 +16,7 @@ def _counts(counts: dict[str, int]) -> str:
 def _nav(token: str) -> str:
     return (
         f"## nav — append `?t={token}` to any path\n"
-        "`/` overview · `/project/<name>` · `/sessions` · `/tabs` · "
+        "`/` overview · `/project/<name>` · `/sessions` · "
         "`/voice` · `/activity` · add `&format=json` for structured data"
     )
 
@@ -49,7 +49,7 @@ def overview(d: dict[str, Any], token: str) -> str:
         "",
         "## totals",
         f"projects {t['projects']} · beads {_counts(t['beads'])} · "
-        f"sessions {t['sessions_pending']} pending · tabs {t['tabs']} · "
+        f"sessions {t['sessions_pending']} pending · "
         f"voice {t['voice']}",
         "",
         "## projects",
@@ -101,22 +101,6 @@ def sessions(d: dict[str, Any], token: str) -> str:
     ])
 
 
-def tabs(d: dict[str, Any], token: str) -> str:
-    rows = [
-        f"pid {t['pid']:<7} {t['tty']:<8.8} {t['mode']:<7.7} "
-        f"sid {t['session'] or '-':<8} {t['title'] or t['cwd']}"
-        for t in d["tabs"]
-    ]
-    return "\n".join([
-        f"# claude tabs @ {d['generated_at']}",
-        "",
-        "## (pid · tty · mode · session · title/cwd)",
-        "\n".join(rows) or "(none live)",
-        "",
-        _nav(token),
-    ])
-
-
 def voice(d: dict[str, Any], token: str) -> str:
     rows = [
         f"{m['slug']:<28.28} {m['kind']:<13.13} {m['created_at']:<20.20} "
@@ -145,5 +129,5 @@ def activity(d: dict[str, Any], token: str) -> str:
 
 RENDER = {
     "overview": overview, "project": project, "sessions": sessions,
-    "tabs": tabs, "voice": voice, "activity": activity,
+    "voice": voice, "activity": activity,
 }

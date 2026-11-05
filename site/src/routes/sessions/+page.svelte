@@ -14,13 +14,10 @@ flowchart TB
   USER -- "add unchecked<br/>reminder" --> L
   L --> D{daemon parses<br/>body headers}
 
-  D -- "no headers" --> INT["Interactive mode"]:::agent
   D -- "capture: true" --> CAP["Capture mode"]:::agent
   D -- "chat: true" --> CHAT["Chat mode"]:::agent
   D -- "chat + fixer: true" --> FIX["Fixer mode"]:::agent
 
-  INT --> GH["spawn Ghostty<br/>run claude/codex"]:::artifact
-  GH -- "mark reminder<br/>completed" --> L
   CAP --> SUB["claude -p / codex exec<br/>(subprocess, stdout → tmpfile)"]:::artifact
   SUB -- "append output to body<br/>mark completed" --> L
   CHAT --> JSON["claude -p --output-format json<br/>--resume &lt;session&gt;"]:::artifact
@@ -69,12 +66,6 @@ sequenceDiagram
   </thead>
   <tbody>
     <tr>
-      <td><strong>Interactive</strong></td>
-      <td>(no header)</td>
-      <td>Completed — work continues in Ghostty.</td>
-      <td>Hand off a task to a real terminal session you'll attend to.</td>
-    </tr>
-    <tr>
       <td><strong>Capture</strong></td>
       <td><code>capture: true</code></td>
       <td>Completed — output appended to body.</td>
@@ -103,9 +94,9 @@ chat: true                                 # opt into Chat mode
 fixer: true                                # together with chat:true → Fixer mode
 session: &lt;uuid&gt;                            # daemon writes this after the first chat turn</code></pre>
 
-<p>Title + any non-header body becomes the prompt for interactive and
-capture. For chat, the prompt is whatever comes after a <code>you:</code>
-block.</p>
+<p>Title + any non-header body becomes the prompt for capture. For chat,
+the prompt is whatever comes after a <code>you:</code> block. A reminder with
+no mode header is ignored.</p>
 
 <h2>How chat mode advances</h2>
 
@@ -134,8 +125,7 @@ turns it into a Fixer-mode chat. Cooldown
   <tbody>
     <tr><td><code>RBRIDGE_CLAUDE_LIST</code> / <code>RBRIDGE_CODEX_LIST</code></td><td><code>Claude: Sessions</code> / <code>Codex: Sessions</code></td><td>Rename the trigger lists.</td></tr>
     <tr><td><code>RBRIDGE_CLAUDE_BIN</code> / <code>RBRIDGE_CODEX_BIN</code></td><td>(auto-discovered)</td><td>Explicit binary path. Useful when multiple Claude installs coexist.</td></tr>
-    <tr><td><code>RBRIDGE_GHOSTTY_APP</code></td><td><code>/Applications/Ghostty.app</code></td><td>Terminal bundle for interactive mode.</td></tr>
-    <tr><td><code>RBRIDGE_CLAUDE_FLAGS</code></td><td>(empty)</td><td>Extra flags appended to <code>claude -p</code> in chat / capture / fixer (e.g. <code>--dangerously-skip-permissions</code>).</td></tr>
+        <tr><td><code>RBRIDGE_CLAUDE_FLAGS</code></td><td>(empty)</td><td>Extra flags appended to <code>claude -p</code> in chat / capture / fixer (e.g. <code>--dangerously-skip-permissions</code>).</td></tr>
     <tr><td><code>RBRIDGE_CAPTURE_TIMEOUT_S</code></td><td><code>1800</code></td><td>Hard kill for capture subprocesses.</td></tr>
     <tr><td><code>RBRIDGE_SESSIONS_TIMEOUT_S</code></td><td><code>900</code></td><td>Hard kill per chat turn.</td></tr>
   </tbody>

@@ -29,7 +29,6 @@ from . import reminders as reminders_module
 from . import serverctl as serverctl_module
 from . import settings as settings_module
 from . import state as state_module
-from . import tabs as tabs_module
 from . import triggers as triggers_module
 from . import watcher as watcher_module
 
@@ -378,7 +377,7 @@ def _run_activity() -> None:
 def _run_triggers() -> None:
     n = triggers_module.process_all()
     if n:
-        log.info("Launched %d session(s) from triggers lists", n)
+        log.info("Capture-launched %d session(s) from triggers lists", n)
 
 
 def _restart() -> None:
@@ -401,12 +400,11 @@ def _apply_controls(cfg: config_module.Config, settings: dict) -> None:
 
 
 # Idle-tick throttle. On an EventKit-change wakeup (woke=True) every lane runs
-# regardless — Reminders edits (toggles, tab `send:`, voice `fetch:`, completing
-# a task) stay instant. These intervals only throttle *pure-interval* idle ticks,
-# where nothing in Reminders changed: a lane whose sole non-Reminders trigger is a
-# subprocess exit, a new Ghostty tab, or a `bd` edit tolerates this latency. This
-# is what keeps idle CPU low even when poll_ms is small — without it the full
-# pipeline (incl. the ~280ms Ghostty `ps` scan) reran every poll.
+# regardless — Reminders edits (toggles, voice `fetch:`, completing a task) stay
+# instant. These intervals only throttle *pure-interval* idle ticks, where nothing
+# in Reminders changed: a lane whose sole non-Reminders trigger is a subprocess
+# exit or a `bd` edit tolerates this latency. This is what keeps idle CPU low even
+# when poll_ms is small.
 _LANE_EVERY_S: dict[str, float] = {
     "migrate": 120.0,
     "projects_list": 30.0,
@@ -416,7 +414,6 @@ _LANE_EVERY_S: dict[str, float] = {
     "activity": 30.0,
     "captures": 30.0,
     "sessions": 30.0,
-    "tabs": 60.0,
     "triggers": 30.0,
     "mailbox": 60.0,
     "manager": 10.0,
@@ -494,8 +491,6 @@ def sync_once(
             _safe("Capture poll", captures_module.poll)
         if _due("sessions", now, woke):
             _safe("Sessions poll", sessions_module.poll)
-        if _due("tabs", now, woke):
-            _safe("Tabs sync", tabs_module.sync)
         if _due("triggers", now, woke):
             _safe("Trigger lists sync", _run_triggers)
         if _due("mailbox", now, woke):

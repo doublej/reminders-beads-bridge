@@ -14,7 +14,7 @@
 A macOS daemon that turns Apple Reminders into a control surface for two things:
 
 1. **Beads issue sync** — one Reminders list per beads project, one reminder per issue, plus four daemon-managed control lists.
-2. **Claude Code / Codex sessions** — separate `_rb_claude_sessions` and `_rb_codex_sessions` lists where each reminder launches a session. Three modes: interactive (Ghostty), one-shot capture, or persistent multi-turn chat driven entirely from the reminder body.
+2. **Claude Code / Codex sessions** — separate `_rb_claude_sessions` and `_rb_codex_sessions` lists where each reminder launches a session. Two modes: headless one-shot capture, or persistent multi-turn chat driven entirely from the reminder body.
 
 Everything is one-way (beads → reminder) except a small set of reverse signals: check to close, uncheck to reopen, add an unprefixed reminder to capture.
 
@@ -44,7 +44,6 @@ Everything is one-way (beads → reminder) except a small set of reverse signals
 | `_rb_dashboard` | One reminder holding the live URL (with a rotating token) for the at-a-glance HTTP endpoint served by `rbridge serve`. The agent entry point: a coding agent opens the URL with `WebFetch`. Body notes when the server is down. Decoupled from `RBRIDGE_LIST_PREFIX` (override `RBRIDGE_DASHBOARD_LIST`). See "Dashboard endpoint". | Daemon (overwrites drift). |
 | `_rb_commands` | Action queue (drops the `_rb_beads_` prefix). Add a `close: <bead-id>` / `reopen: <bead-id>` / `note: <bead-id> \| <text>` reminder; the daemon runs it and rewrites the title in place to `ok:`/`error:` within ~5s — leave it unchecked. Gives the fire-and-forget agent an ack channel and keeps close/reopen/note off overloaded checkbox gestures. Override `RBRIDGE_COMMANDS_LIST`. | Agent queues; daemon executes + acks. |
 | `_rb_voice_<slug>` | One per open voice exchange. Header + brief reminders are daemon-owned; everything else is added by the user. See "Voice exchange mailboxes". Note: voice lists deliberately drop the `_rb_beads_` prefix — the voice flow is independent of beads. | Agent + user (responses). |
-| `_rb_claude_tabs` | One reminder per live Ghostty tab running Claude Code. Body = status header + live transcript tail + message log + a `send:` region. See "Claude tabs". Deliberately drops the `_rb_beads_` prefix — independent of beads. | Daemon writes the body; you type under `send:` and check to send; a bare `expand:` line pulls the full transcript (`collapse:` shrinks). |
 
 Hiding a project via `_rb_beads_projects` is **destructive** for any free-form text in `<bb:notes>` — bead state itself is untouched. The point of hiding is to drop the project from agent context entirely.
 
@@ -91,14 +90,11 @@ uv run rbridge run       # persistent poll loop
 | `RBRIDGE_CLAUDE_LIST` | `_rb_claude_sessions` | Reminders list that drives Claude sessions. |
 | `RBRIDGE_CODEX_LIST` | `_rb_codex_sessions` | Reminders list that drives Codex sessions. |
 | `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN` | (auto-found on `$PATH`) | Explicit binary path for the session engine. |
-| `RBRIDGE_GHOSTTY_APP` | `/Applications/Ghostty.app` | Terminal bundle used for interactive sessions. |
 | `RBRIDGE_CLAUDE_FLAGS` | (empty) | Extra flags passed to `claude -p` in chat / capture / fixer modes. |
 | `RBRIDGE_CAPTURE_TIMEOUT_S` | `1800` | Hard timeout per capture session. |
 | `RBRIDGE_SESSIONS_TIMEOUT_S` | `900` | Hard timeout per chat-mode turn. |
-| `RBRIDGE_TABS_LIST` | `_rb_claude_tabs` | Reminders list mirroring live Ghostty Claude Code tabs. |
 | `RBRIDGE_CAPTURE_STATE` | `~/.claude/reminders-bridge-captures.json` | Capture-mode session state (pid, tempfile, list). |
 | `RBRIDGE_SESSIONS_STATE` | `~/.claude/reminders-bridge-sessions.json` | Chat-mode turn state (pid, session id, reminder). |
-| `RBRIDGE_TABS_STATE` | `~/.claude/reminders-bridge-tabs.json` | Per-tab state (reminder id, sent log, last error). |
 | `RBRIDGE_FIXER_THRESHOLD` | `5` | Consecutive same-subsystem failures before auto-escalating to a fixer reminder. |
 | `RBRIDGE_FIXER_COOLDOWN_S` | `3600` | Minimum gap between auto-escalations. |
 | `RBRIDGE_FIXER_LOG_LINES` | `120` | Daemon log tail length included in the fixer base prompt. |
@@ -124,7 +120,6 @@ uv run rbridge run       # persistent poll loop
 - `rbridge mailbox close --slug <s>` — archive the responses, then tear down the mailbox.
 - `rbridge mailbox refresh --slug <s>` — re-up header + brief + mirror reminders.
 - `rbridge mailbox list` — enumerate active mailboxes, then closed archives.
-- `rbridge tabs` — list live Ghostty tabs running Claude Code (pid / tty / mode / session / project). Read-only.
 ## Sessions: launching Claude / Codex from Reminders
 
 Two reminders lists drive standalone agent sessions, fully decoupled from the beads sync. Toggling `_rb_beads_projects`, hiding projects, or having no `.beads/` directories has no effect here.
@@ -134,20 +129,20 @@ Two reminders lists drive standalone agent sessions, fully decoupled from the be
 | `_rb_claude_sessions` | `claude` | override with `RBRIDGE_CLAUDE_LIST` |
 | `_rb_codex_sessions`  | `codex`  | override with `RBRIDGE_CODEX_LIST` |
 
-Each unchecked reminder is a session request. The body headers pick which of three modes runs:
+Each unchecked reminder is a session request. The body headers pick which of two modes runs:
 
 | Mode | Trigger | Lifecycle | Use case |
 |------|---------|-----------|----------|
-| **Interactive** (default) | no headers | Daemon opens a Ghostty window, runs `claude` / `codex` with the prompt prefilled, marks the reminder completed. | Hand off a task to a real terminal session. |
 | **Capture** | `capture: true` in body | Daemon runs the binary in print mode (`claude -p` / `codex exec`) as a background subprocess, captures stdout, appends `--- claude output <ts> ---\n<output>` to the body, marks completed. | Headless one-shot: ask a question, get the answer back inside the reminder. |
 | **Chat** | `chat: true` in body | Daemon turns the reminder into a persistent multi-turn conversation. Reminder stays unchecked across turns. | Long-running session you drive entirely from Reminders.app. |
 
 Common headers:
 
 - `cwd: <path>` — working directory (`~` allowed). Default: `$HOME`.
-- Title and any non-header body text become the prompt (interactive + capture). For chat mode, see below.
+- Title and any non-header body text become the prompt (capture mode). For chat mode, see below.
+- A reminder with **no** mode header is ignored. The old default — open a terminal window with the prompt prefilled — was Ghostty-only and was removed with Ghostty.
 
-Example interactive request:
+Example capture request:
 ```
 cwd: ~/dev/python/foo
 
@@ -162,7 +157,7 @@ capture: true
 What does main.py do? Reply in one paragraph.
 ```
 
-Binaries: `claude` / `codex` on `$PATH` (override with `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`). Ghostty: `/Applications/Ghostty.app` (override with `RBRIDGE_GHOSTTY_APP`).
+Binaries: `claude` / `codex` on `$PATH` (override with `RBRIDGE_CLAUDE_BIN` / `RBRIDGE_CODEX_BIN`).
 
 ### Chat mode (multi-turn, body-driven)
 
@@ -209,35 +204,6 @@ The _rb_codex_sessions list isn't picking up new reminders. Investigate.
 
 Auto-escalation: if any single subsystem (`Sessions poll`, `Capture poll`, `Readme list sync`, …) fails `RBRIDGE_FIXER_THRESHOLD` times in a row (default 5), the daemon writes its own fixer reminder titled `rbridge auto-fixer` into `_rb_claude_sessions` with the error trail in the body. Cooldown: `RBRIDGE_FIXER_COOLDOWN_S` (default 3600) prevents loops.
 
-## Claude tabs
-
-`_rb_claude_tabs` is a standalone lane (peer to Sessions and Voice; no beads coupling) that mirrors every **live Ghostty tab running Claude Code** as one reminder. It's read-from-anywhere: a glanceable status board plus an inbox you can reply into from your phone. Driven by `tabs.sync()` once per cycle.
-
-**Discovery** (`ghostty.py`, modelled on the `claude-activity-watcher` tool): the daemon finds the Ghostty root process (`Ghostty.app/Contents/MacOS/ghostty`), then every interactive `claude` process (argv0 basename `claude`, a real tty, ancestor chain reaching Ghostty — this excludes the `claude daemon` and detached `versions/<x>` helpers). Each qualifying process is one tab. The tab's cwd comes from `lsof`; the session jsonl is the newest file under `~/.claude/projects/<encoded-cwd>/` (`transcript.py`).
-
-Title resolution + session id come from `~/.claude/sessions/<pid>.json` (authoritative per-pid record), falling back to the newest jsonl in the cwd's project dir. The **tab title** is the jsonl's `aiTitle` (the title Claude paints on the Ghostty tab) — this is the key matched against the tab bar when sending.
-
-**Reminder per tab** (keyed by pid, `priority 1`):
-- Title: `{aiTitle or project} · {tty}`.
-- Body (daemon-owned, overwritten on drift):
-  - Header: `tab` (title), `project` + `status` (idle/busy/shell), `cwd`, `tty` / `pid` / `mode`, `session`.
-  - `transcript (live · read-only)` — the last 6 messages from the session jsonl (`transcript.render_tail`), refreshed every cycle. The newest turn gets a fatter char budget (up to 2000) than the older scrollback (400) so a session's final summary isn't decapitated.
-  - `sent` — log of messages typed into the tab.
-  - `send:` — the region read back for sending; `expand:` / `collapse:` control lines are also read back (see below).
-
-**Read the transcript**: just open the reminder. The tail updates as the live session progresses. The compact tail clips older turns, so a long session (e.g. a review that ran in the tab) shows only a stub of what it did. To pull the recent session **in full** — 15 turns, up to 6000 chars each, line breaks preserved — add a bare `expand:` line to the body and leave it unchecked. This is the nav-lane `fetch:`→rewrite pattern, not the checkbox: completion is already the send trigger, so expand is **content-triggered** and needs no completion. Next cycle the daemon swaps the transcript, flips the header to `EXPANDED`, and drops the marker (the ack); `collapse:` returns to the tail. The expanded flag is sticky per tab so a fire-and-forget agent reliably reads the fuller body on its next turn. `parse_send` strips bare `expand:`/`collapse:` lines, so they are never typed into the live tab even if written inside the `send:` region.
-
-**Send a message — types into the live tab, as you would.** Write under `send:` and complete the reminder — completion is the send trigger; an unchecked `send:` is just a staged draft. **Agents must set the `send:` text and `completed: true` in one update call** — completing first sends an empty payload (the daemon reads body + completion from a single poll and unchecks completed tab reminders each cycle). macOS offers no silent way to inject terminal input (`TIOCSTI` is root-only; writing to the tty only paints the display), so the daemon drives the GUI: it activates Ghostty, finds the tab whose tab-bar title (status-glyph prefix stripped) matches this reminder's title, switches to it, re-verifies focus, then pastes the message and presses Return. On success it logs `you (ts): …` and clears `send:`; on failure it keeps your message under `send:` with a `⚠ couldn't type into tab` note so you can re-check to retry. Hard guards abort *before* any keystroke if the tab can't be matched or focus doesn't verify — it never types into the wrong session.
-
-**Requirements / limits for send**:
-- **Accessibility permission** for the process running the daemon (System Settings → Privacy & Security → Accessibility). `rbridge doctor` reports whether it's granted.
-- The target tab must be on the **active Space** — windows on other Spaces are invisible to the accessibility API.
-- It steals focus to Ghostty for ~1s (that's what typing is). There's a sub-second race if you switch tabs at the exact moment it pastes.
-
-**GC**: when a tab's pid disappears (tab closed), its reminder and state are dropped (`tab-closed`). This lane reflects live tabs — it is not a persistent chat store (use a `chat: true` `_rb_claude_sessions` reminder for that). Activity events: `tab-opened`, `tab-send`, `tab-send-failed`, `tab-closed`.
-
-`rbridge tabs` prints the discovered tabs (pid / tty / mode / session / project) without touching Reminders.
-
 ## Dashboard endpoint
 
 A read-only HTTP view of the whole bridge "at a glance" — projects, per-status
@@ -269,10 +235,9 @@ and appended as `?t=<token>`:
 
 | Path | Shows |
 |------|-------|
-| `/` | overview: totals (projects, beads by status, pending sessions, live tabs, voice) + per-project rows + recent activity |
+| `/` | overview: totals (projects, beads by status, pending sessions, voice) + per-project rows + recent activity |
 | `/project/<name>` | full bead list for one project (id · priority · status · type · linked · title) |
 | `/sessions` | Claude + Codex session reminders (engine · state · mode · title) |
-| `/tabs` | live Ghostty Claude tabs (pid · tty · mode · session · title) |
 | `/voice` | active voice exchange mailboxes |
 | `/activity` | full ~200-event activity log |
 

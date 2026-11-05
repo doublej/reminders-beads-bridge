@@ -3,8 +3,12 @@
 Two reminders lists, `_rb_claude_sessions` and `_rb_codex_sessions`. Each unchecked
 reminder is a pending request: title is the prompt, optional `cwd: <path>`
 line in the body sets the working directory, the rest of the body is appended
-to the prompt. Daemon scans both lists every cycle, launches Ghostty for each
-pending request, and marks the reminder completed.
+to the prompt. Daemon scans both lists every cycle and launches a headless
+`capture: true` run for each pending request.
+
+The interactive path (spawn the prompt in a new terminal window) was Ghostty-only
+and is gone; a pending reminder with neither `capture:` nor `chat:` is left
+untouched for the user to fix rather than retried forever.
 """
 
 import logging
@@ -14,7 +18,6 @@ from pathlib import Path
 
 from . import activity as activity_module
 from . import captures as captures_module
-from . import launch as launch_module
 from . import reminders as reminders_module
 from . import sessions as sessions_module
 
@@ -59,35 +62,20 @@ def _process_list(list_name: str, cmd: str) -> int:
     ]
     if not pending:
         return 0
-    batch = reminders_module.Batch()
     launched = 0
     for rem in pending:
         cwd, prompt, capture = parse_request(rem)
-        if capture:
-            try:
-                captures_module.launch_capture(rem.id, list_name, cmd, prompt, cwd)
-            except OSError as e:
-                log.warning("%s capture-launch failed for %r: %s", cmd, rem.name, e)
-                activity_module.record(list_name, f"{cmd}-error", "", str(e))
-                continue
-            log.info("Capture-launched %s for %r in %s", cmd, rem.name, cwd)
-            activity_module.record(
-                list_name, f"{cmd}-capture-queued", "", rem.name
-            )
-            launched += 1
+        if not capture:
             continue
         try:
-            launch_module.launch(cwd, prompt, cmd=cmd)
-        except RuntimeError as e:
-            log.warning("%s launch failed for %r: %s", cmd, rem.name, e)
+            captures_module.launch_capture(rem.id, list_name, cmd, prompt, cwd)
+        except OSError as e:
+            log.warning("%s capture-launch failed for %r: %s", cmd, rem.name, e)
             activity_module.record(list_name, f"{cmd}-error", "", str(e))
             continue
-        log.info("Launched %s for %r in %s", cmd, rem.name, cwd)
-        activity_module.record(list_name, f"{cmd}-launched", "", rem.name)
-        batch.updates.append({"id": rem.id, "completed": True})
+        log.info("Capture-launched %s for %r in %s", cmd, rem.name, cwd)
+        activity_module.record(list_name, f"{cmd}-capture-queued", "", rem.name)
         launched += 1
-    if not batch.empty():
-        reminders_module.apply_batch(list_name, batch)
     return launched
 
 
